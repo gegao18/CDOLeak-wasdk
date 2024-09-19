@@ -1,0 +1,534 @@
+//
+// Heuristics file for Xaml leak detector
+//
+// Format:
+//
+// [Rule Name]
+// + {string match for AddRef --> {eventually called function (-->)} -> {immediately called function (->)}
+//   note: --> and -> chaining are optional
+//         the called function has to be the very next stack frame with ->, but not with -->
+// - {string match for Release}
+//
+// or
+//
+// [Rule Name]
+// = {top-level method scope}
+//   + {string match for AddRef, immediately called function} -> {immediately called function (->)}
+//   - {string match for Release, immediately called function} --> {eventually called function (-->)}
+// note:
+//   This is like the first format, but matches are resctricted to the same top-level function name.
+//   This is useful for matching AddRef/Releases for local variables within the same method.
+//
+// or
+//
+// [Rule Name]
+// =*
+//   + {string match for AddRef, immediately called function} -> {immediately called function (->)}
+//   - {string match for Release, immediately called function} --> {eventually called function (-->)}
+// note:
+//   This is a wildcard format for scoped match, where the AddRef/Release pair can be matched
+//   up under any parent function that directly calls both.
+//
+
+[CTimeline::ResolveLocalTarget]
+= CTimeline::ResolveLocalTarget
+  + xref::weakref_ptr<CDependencyObject>::lock
+  - xref_ptr<CDependencyObject>::operator=
+  - xref_ptr<CResourceDictionary>::operator=
+
+///////////////////
+//
+// Events
+//
+///////////////////
+
+[CLR_FireEvent]
+= CCoreServices::CLR_FireEvent
+  + AddRefInterface
+  - ReleaseInterface
+
+// Calls could be broken up by a call out to managed code, which breaks the stack
+[CCoreServices::CLR_FireEvent]
++ CCoreServices::CLR_FireEvent -> AddRefInterface
+- CCoreServices::CLR_FireEvent -> ReleaseInterface
+
+[CEventInfo]
+= CXcpDispatcher::OnWindowMessage
+  + CXcpDispatcher::OnScriptCallback -> CEventInfo::{ctor}
+  - CXcpDispatcher::OnScriptCallback -> CEventInfo::{dtor}
+
+[CEventInfo]
+= CXcpDispatcher::OnScriptCallback
+  + CEventInfo::{ctor}
+  - CEventInfo::{dtor}
+
+[CEventInfo]
+= CXcpBrowserHost::SyncScriptCallbackRequest
+  + CEventInfo::CEventInfo
+  + CEventInfo::{ctor}
+  - CEventInfo::~CEventInfo
+  - CEventInfo::{dtor}
+  - CDependencyObject::Release
+
+[CXcpDispatcher::SyncScriptCallbackRequest]
++ CXcpBrowserHost::SyncScriptCallbackRequest -> CEventInfo::CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::{dtor}
+- CXcpDispatcher::OnScriptCallback -> CDependencyObject::Release
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CDependencyObject::Release
+
+[CXcpDispatcher::SyncScriptCallbackRequest]
++ CXcpBrowserHost::SyncScriptCallbackRequest -> CEventInfo::{ctor}
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::{dtor}
+- CXcpDispatcher::OnScriptCallback -> CDependencyObject::Release
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CDependencyObject::Release
+
+[CXcpDispatcher::PostAsyncScriptCallbackRequest]
++ CXcpBrowserHost::PostAsyncScriptCallbackRequest -> CEventInfo::CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::{dtor}
+- CXcpDispatcher::OnScriptCallback -> CDependencyObject::Release
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CDependencyObject::Release
+
+[CXcpDispatcher::PostAsyncScriptCallbackRequest]
++ CXcpBrowserHost::PostAsyncScriptCallbackRequest -> CEventInfo::{ctor}
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback --> CPendingMessage::{dtor} --> CEventInfo::{dtor}
+- CXcpDispatcher::OnScriptCallback -> CDependencyObject::Release
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CDependencyObject::Release
+
+[CXcpDispatcher::OnScriptCallback]
++ CXcpDispatcher::OnScriptCallback -> CEventInfo::CEventInfo
++ CXcpDispatcher::OnScriptCallback -> {ctor}
+- CXcpDispatcher::OnScriptCallback -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> {dtor}
+- CXcpDispatcher::OnScriptCallback -> CDependencyObject::Release
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CEventInfo::~CEventInfo
+- CXcpDispatcher::OnScriptCallback -> CPendingMessages::ReleaseResource --> CXcpDispatcher::ReleaseMessageResources -> CDependencyObject::Release
+
+[CEventInfo]
++ CXcpDispatcher::OnWindowMessage -> CXcpDispatcher::OnScriptCallback -> CEventInfo::{ctor}
+- CEventManager::RaiseHelper -> CXcpBrowserHost::SyncScriptCallbackRequest -> CEventInfo::{dtor}
+
+
+////////////////////////
+//
+// GetItemWithAddRef
+//
+////////////////////////
+
+[GetItemWithAddRef]
+=*
+  + GetItemWithAddRef
+  - xref_ptr<CUIElement>::~xref_ptr<CUIElement>
+  - xref_ptr<CDependencyObject>::{dtor}
+  - xref_ptr<CUIElement>::{dtor}
+  - Release
+
+
+////////////////////////
+//
+// Parser
+//
+////////////////////////
+
+[CApplication::LoadComponent]
+= CApplication::LoadComponent
+  + CCoreServices::ParseXamlWithExistingFrameworkRoot -> CParser::LoadXaml -> CParser::LoadXamlCore -> AddRefInterface
+  - xref_ptr<CDependencyObject>::{dtor}
+
+[SetCustomRuntimeDataImpl]
+= SetCustomRuntimeDataImpl
+  + XamlQualifiedObject::GetOwnedDependencyObject
+  - std::shared_ptr<CustomWriterRuntimeData>::~shared_ptr<CustomWriterRuntimeData>
+  - std::shared_ptr<StyleCustomRuntimeData>::~shared_ptr<StyleCustomRuntimeData>
+
+[FindNextAmbientValue]
+= FindNextAmbientValue
+  + AmbientValue::GetQo
+  - XamlQualifiedObject::{dtor}
+
+[ActivateInstance CDO]
+= ActivateInstance
+  + DirectUI::DXamlCore::GetPeer --> CoreImports::DependencyObject_AddRef
+  - ReleaseInterface
+
+[CParser::LoadXamlCore QO]
++ CParser::LoadXamlCore --> XamlQualifiedObject::SetDependencyObject -> CValue::SetObjectAddRef
+- CParser::LoadXamlCore --> XamlQualifiedObject::~XamlQualifiedObject
+
+
+////////////////////////
+//
+// DXaml layer
+//
+////////////////////////
+
+[Resolve]
++ WeakReference.cpp @ 25
+- WeakReference.cpp @ 40
+- WeakReference.cpp @ 41
+
+[TryGetPeerWithInternalRef]
+=*
+  + TryGetPeerWithInternalRef
+  - release_interface_inner
+
+
+[TryGetPeerWithInternalRef 2]
+=*
+  + SetExpectedReferenceOnPeer -> TryGetPeerWithInternalRef
+  - SetExpectedReferenceOnPeer -> release_interface_inner
+
+[TryGetPeerWithInternalRef 3]
+=*
+  + ClearExpectedReferenceOnPeer -> TryGetPeerWithInternalRef
+  - ClearExpectedReferenceOnPeer -> release_interface_inner
+
+[CContentControl/Presenter::Content]
++ ::Content+ --> ctl::addref_interface_inner
+- ::Content+ --> ctl::release_interface_inner
+
+[ExpectedReferenceOnPeer]
++ SetExpectedReferenceOnPeer
+- ClearExpectedReferenceOnPeer
+
+[Iterator]
++ DefaultFocusChildrenIterator::CreateInstance
+- IIterator<ABI::Microsoft::UI::Xaml::DependencyObject *> >::{dtor}
+
+[Iterable]
++ DefaultFocusChildrenIterable::CreateInstance
+- ctl::ComObject<FocusProperties::DefaultFocusChildrenIterable>::`scalar deleting destructor'
+
+
+////////////////////////
+//
+// Page-specific
+//
+////////////////////////
+
+[CUIElementCollection::RemoveAllUnloadingChildren]
+= RemoveAllUnloadingChildren
+  + _xvector_base<xref_ptr<CUIElement> >::push_back
+  - xvector<xref_ptr<CUIElement> >::{dtor}
+
+[VSM thing]
++ CustomWriterRuntimeObjectCreator::BuildObjectWriterSettings -> CustomWriterRuntimeContext::GetRootInstance
+- OptimizedVisualStateManagerDataSource::~OptimizedVisualStateManagerDataSource --> XamlQualifiedObject::~XamlQualifiedObject
+
+[UnloadElement]
++ CUIElementCollection::UnloadElement -> AddRefInterface+
+- CUIElementCollection::RemoveUnloadedElement -> ReleaseInterface+
+
+[RemoveAllElements GetItemWithAddRef]
++ CUIElementCollection::RemoveAllElements -> CDOCollection::GetItemWithAddRef
+- CUIElementCollection::RemoveUnloadedElement -> ReleaseInterfaceNoNULL
+
+[CContentPresenter::Content]
++ CContentPresenter::Content -> CValue::CopyConverted
+- CContentPresenter::Content -> CValue::ReleaseAndReset
+- CContentPresenter::Content -> CValue::~CValue -> CValue::ReleaseAndReset
+
+[CContentControl::Content]
++ CContentControl::Content -> CValue::CopyConverted
+- CContentControl::Content -> CValue::~CValue
+
+[Window content]
++ DirectUI::Window::put_ContentImpl --> CContentControl::SetValue --> CContentControl::Content -> CValue::CopyConverted
+- DirectUI::DesktopWindowImpl::OnClosed --> CContentControl::SetValue --> CContentControl::Content -> CValue::ReleaseAndReset
+
+[Container]
++ CUIElement::AddChild -> CUIElementCollection::Append -> CDOCollection::Append
+- CUIElementCollection::RemoveUnloadedElement -> ReleaseInterfaceNoNULL
+
+[ctor into pCoreObject]
++ CPage::Create
+- DirectUI::ActivationAPI::ActivateInstance -> ReleaseInterface
+
+
+////////////////////////
+//
+// Layout Transition Elements
+//
+////////////////////////
+
+[CLayoutTransitionElement]
++ CTransition::SetupTransition -> CLayoutTransitionElement::Create
+- LayoutTransitionStorage::UnregisterBrushRepresentation -> CLayoutTransitionElement::DetachTransition
+
+[LayoutTransitionCompletedData]
++ CTransition::SetupTransition -> LayoutTransitionCompletedData::{ctor}
+- LayoutTransitionStorage::CleanupStoryboard --> LayoutTransitionCompletedData::{dtor}
+
+[m_elementsWithDeferredTransitions]
++ CLayoutManager::RegisterElementForDeferrredTransition -> std::vector<xref_ptr<CUIElement>,std::allocator<xref_ptr<CUIElement> > >::emplace_back
+- CLayoutManager::RealizeRegisteredLayoutTransitions -> std::vector<xref_ptr<CUIElement>,std::allocator<xref_ptr<CUIElement> > >::clear
+- CLayoutManager::UnregisterElementForDeferredTransition -> std::vector<xref_ptr<CUIElement>,std::allocator<xref_ptr<CUIElement> > >::erase
+
+[stack_vector]
+= CLayoutManager::RealizeRegisteredLayoutTransitions
+  + std::vector<xref_ptr<CUIElement>,Jupiter::stack_allocator<xref_ptr<CUIElement>,128,8> >::emplace_back
+  - Jupiter::stack_vector<xref_ptr<CUIElement>,16>::~stack_vector<xref_ptr<CUIElement>,16>
+
+[RealizeRegisteredLayoutTransitions local]
+= CLayoutManager::RealizeRegisteredLayoutTransitions
+  + xref_ptr<CUIElement>::xref_ptr<CUIElement>
+  - xref_ptr<CUIElement>::{dtor}
+
+[Transition::NotifyLayoutTransitionEnd spElementDO]
+= Transition::NotifyLayoutTransitionEnd
+  + DirectUI::DXamlCore::GetPeer
+  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr
+
+
+////////////////////////
+//
+// DXaml & TrackerReference
+//
+////////////////////////
+
+[DirectUI::TrackerTargetReference::Set IDependencyObject check]
+= DirectUI::TrackerTargetReference::Set
+  + ctl::query_interface<ABI::Microsoft::UI::Xaml::IDependencyObject,IUnknown>
+  - ctl::release_interface_nonull<ABI::Microsoft::UI::Xaml::IDependencyObject>
+
+[DirectUI::TrackerTargetReference::Set IDependencyObject check]
+= DirectUI::TrackerTargetReference::Set
+  + ctl::query_interface<ABI::Microsoft::UI::Xaml::Hosting::IReferenceTrackerInternal,IUnknown>
+  - ctl::release_interface_nonull<ABI::Microsoft::UI::Xaml::Hosting::IReferenceTrackerInternal>
+
+[query_interface_cast into ComPtr]
+=*
+  + ctl::query_interface_cast<DirectUI::DependencyObject,IInspectable>
+  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr<DirectUI::DependencyObject>
+
+[ctl::addref_expected]
+= ctl::addref_expected
+  + ctl::query_interface<ABI::Microsoft::UI::Xaml::Hosting::IReferenceTrackerInternal,IInspectable>
+  - ReleaseInterface<ABI::Microsoft::UI::Xaml::Hosting::IReferenceTrackerInternal>
+
+[ExternalObjectReference::ShouldBeWrapped]
+= ExternalObjectReference::ShouldBeWrapped
+  + ctl::do_get_value<ABI::Microsoft::UI::Xaml::IDependencyObject>
+  - ReleaseInterface<ABI::Microsoft::UI::Xaml::IDependencyObject>
+
+[DirectUI::CValueBoxer::UnboxObjectValue spInspectable]
+= DirectUI::CValueBoxer::UnboxObjectValue
+  + DirectUI::CValueBoxer::UnwrapExternalObjectReferenceIfPresent
+  - ctl::ComPtr<IInspectable>::~ComPtr<IInspectable>
+
+[AgCoreCallbacks::UnpegManagedPeerNoRef]
+= AgCoreCallbacks::UnpegManagedPeerNoRef
+  + DirectUI::DXamlCore::TryGetPeer
+  - ctl::release_interface<DirectUI::DependencyObject>
+
+[DirectUI::PresentationFrameworkCollection<ABI::Microsoft::UI::Xaml::UIElement *>::Append]
+= DirectUI::PresentationFrameworkCollection<ABI::Microsoft::UI::Xaml::UIElement *>::Append
+  + DirectUI::CValueBoxer::BoxObjectValue
+  - ctl::release_interface<DirectUI::DependencyObject>
+
+//[DirectUI::CValueBoxer::BoxObjectValue spValueAsInsp]
+//= DirectUI::CValueBoxer::BoxObjectValue
+//  + DirectUI::ExternalObjectReference::ConditionalWrap -> ctl::do_get_value<ABI::Microsoft::UI::Xaml::IDependencyObject>
+//  - ctl::ComPtr<IInspectable>::~ComPtr<IInspectable>
+
+//[DirectUI::DependencyObject::SetValueCore eor]
+//= DirectUI::DependencyObject::SetValueCore
+//  + DirectUI::CValueBoxer::BoxObjectValue
+//  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr<DirectUI::DependencyObject>
+
+
+////////////////////////
+//
+// XamlReader
+//
+////////////////////////
+
+[DirectUI::XamlReaderFactory::LoadImpl]
+= DirectUI::XamlReaderFactory::LoadImpl
+  + ctl::query_interface<ABI::Microsoft::UI::Xaml::IDependencyObject,IInspectable>
+  - ReleaseInterface<ABI::Microsoft::UI::Xaml::IDependencyObject>
+
+
+////////////////////////
+//
+// Wildcard Scoped
+//
+////////////////////////
+
+[DXaml IUIElement ComPtr cast]
+=*
+  + ctl::ComPtr<DirectUI::DependencyObject>::As<ABI::Microsoft::UI::Xaml::IUIElement>
+  - ctl::ComPtr<ABI::Microsoft::UI::Xaml::IUIElement>::~ComPtr<ABI::Microsoft::UI::Xaml::IUIElement>
+
+[DXaml TryGetPeer into ComPtr]
+=*
+  + DirectUI::DXamlCore::TryGetPeer
+  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr<DirectUI::DependencyObject>
+
+[DXaml TryGetPeer into regular ptr]
+=*
+  + DirectUI::DXamlCore::TryGetPeer
+  - ctl::release_interface<DirectUI::DependencyObject>
+
+[DXaml GetPeer into ComPtr]
+=*
+  + DirectUI::DXamlCore::GetPeer
+  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr<DirectUI::DependencyObject>
+
+[DXaml GetPeer into ComPtr]
+=*
+  + DirectUI::DXamlServices::GetPeer
+  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr<DirectUI::DependencyObject>
+
+[DXaml GetPeer into regular ptr]
+=*
+  + DirectUI::DXamlCore::GetPeer
+  - ctl::release_interface<DirectUI::DependencyObject>
+
+[DXaml do_query_interface into ComPtr]
+=*
+  + ctl::do_query_interface<DirectUI::DependencyObject,IInspectable>
+  - ctl::ComPtr<DirectUI::DependencyObject>::~ComPtr<DirectUI::DependencyObject>
+
+[DXaml QI into IUIElement regular ptr]
+=*
+  + ctl::do_query_interface<ABI::Microsoft::UI::Xaml::IUIElement,IInspectable>
+  - ReleaseInterface<ABI::Microsoft::UI::Xaml::IUIElement>
+
+[Assigning to ComPtr]
+=+
+  + ctl::ComPtr<IInspectable>::operator=
+  - ctl::ComPtr<IInspectable>::~ComPtr<IInspectable>
+
+[CLR_FireEvent]
+=*
+  + AddRefInterface
+  - ReleaseInterface
+
+[local XamlQualifiedObject]
+=*
+  + XamlQualifiedObject::ConvertForManaged --> CValue::SetObjectAddRef
+  - XamlQualifiedObject::{dtor} -> CValue::~CValue
+  - XamlQualifiedObject::{dtor} -> CValue::{dtor}
+
+[XamlQualifiedObject param]
+=*
+  + ObjectWriterContext::Runtime_GetAmbientValue -> XamlQualifiedObject::ConvertForManaged --> CValue::CopyConverted --> CValue::SetObjectAddRef
+  - XamlQualifiedObject::{dtor}
+
+[GetOwnedDependencyObject param]
+=*
+  + XamlQualifiedObject::GetOwnedDependencyObject
+  - std::shared_ptr<CDependencyObject>::{dtor}
+
+[GetOwnedDependencyObject param]
+=*
+  + RemoveObjectReferencesFromStack -> XamlQualifiedObject::GetOwnedDependencyObject
+  - RemoveObjectReferencesFromStack -> std::shared_ptr<CDependencyObject>::{dtor}
+
+[CValue local]
+=*
+  + CValue::SetObjectAddRef
+  - CValue::{dtor}
+
+[CValue local from GetValue]
+=*
+  + CUIElement::GetValue --> CValue::CopyConverted --> SetObjectAddRef
+  - CValue::{dtor}
+
+[xref_ptr param]
+=*
+  + xref_ptr<CUIElement>::{ctor}
+  - xref_ptr<CUIElement>::{dtor}
+
+[Casting into xref_ptr local]
+=*
+  + DoPointerCast -> xref_ptr<CUIElement>::operator=
+  - xref_ptr<CUIElement>::{dtor}
+
+[XamlQOFromCDOHelper QO local]
+=*
+  + XamlQOFromCDOHelper -> XamlQualifiedObject::SetValue --> CValue::CopyConverted
+  - xref_ptr<CDependencyObject>::{dtor}
+
+[local CValue from CValue::CopyConverted]
+=*
+  + CValue::CopyConverted --> SetObjectAddRef
+  - CValue::{dtor}
+
+[Locking weakref_ptr]
+=*
+  + xref::weakref_ptr<CDependencyObject>::lock
+  - xref_ptr<CDependencyObject>::{dtor}
+
+
+////////////////////////
+//
+// Scoped
+//
+////////////////////////
+
+[GetVisualRelative local CValue result]
+= GetVisualRelative
+  + DependencyObject_GetVisualRelative -> CValue::SetObjectAddRef
+  - CValue::~CValue
+  - CValue::{dtor}
+
+[GetVisualRelative local CValue result]
+= GetParentStaticPrivate
+  + GetRelative -> GetVisualRelative -> DependencyObject_GetVisualRelative -> CValue::SetObjectAddRef
+  - GetRelative -> GetVisualRelative -> CValue::{dtor}
+
+[GetFirstChildGetItemWithAddRef]
+= CUIElement::GetFirstChildNoAddRef
+  + CUIElement::GetFirstChild -> GetItemWithAddRef
+  - ReleaseInterfaceNoNULL
+
+[GetFirstChildGetItemWithAddRef]
+= CFrameworkElement::HasTemplateChild
+  + CUIElement::GetFirstChildNoAddRef -> CUIElement::GetFirstChild -> GetItemWithAddRef
+  - CUIElement::GetFirstChildNoAddRef -> ReleaseInterfaceNoNULL
+
+[PointerInputProcessor::ProcessPointerInput loop]
+= PointerInputProcessor::ProcessPointerEnterLeave
+  + xref_ptr<CDependencyObject>::operator=
+  - xref_ptr<CDependencyObject>::operator=
+
+[PointerInputProcessor::ProcessPointerInput loop]
+= PointerInputProcessor::ProcessPointerEnterLeave
+  + CPointerState::SetEnterDO
+  - CPointerState::SetEnterDO
+
+[PointerInputProcessor::ProcessPointerInput loop]
+= PointerInputProcessor::ProcessPointerEnterLeave
+  + xref_ptr<CResourceDictionary>::operator=
+  - xref_ptr<CResourceDictionary>::operator=
+
+[DependencyObject::SetValueCore]
+= DependencyObject::SetValueCore
+  + CValueBoxer::BoxObjectValue
+  - CValue::{dtor}
+
+
+////////////////////////
+//
+// Unscoped
+//
+////////////////////////
+
+[REQUEST m_pObject]
++ CEventManager::AddRequest -> AddRefInterface
+- REQUEST::~REQUEST
+- REQUEST::{dtor}
+
+
+[Raised Loaded events]
++ AddToLoadedEventList
+- RaiseLoadedEvent -> xref_ptr<CDependencyObject>::{dtor}

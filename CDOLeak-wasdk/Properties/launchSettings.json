@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "CDOLeak-wasdk (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "CDOLeak-wasdk (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
