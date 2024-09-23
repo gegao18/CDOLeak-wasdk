@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CDOLeak_wasdk
 {
@@ -45,6 +42,26 @@ namespace CDOLeak_wasdk
         public const char ReleaseKeyword = '-';
         public const char NameStartKeyword = '[';
         public const char NameEndKeyword = ']';
+
+        public AddRefReleaseHeuristic(string name)
+        {
+            Name = name;
+            _addRefPatterns = new HeuristicFrame[1];
+            _releasePatterns = new List<HeuristicFrame[]>();
+        }
+
+        public void SetAddRef(string addRefPattern)
+        {
+            _addRefPatterns = new HeuristicFrame[1] { new HeuristicFrame() { Pattern = addRefPattern } };
+        }
+
+        public void SetRelease(string releasePattern)
+        {
+            _releasePatterns = new List<HeuristicFrame[]>()
+            {
+                new HeuristicFrame[1] { new HeuristicFrame() { Pattern = releasePattern } }
+            };
+        }
 
         public AddRefReleaseHeuristic(string name, string scope, string addRef, IEnumerable<string> releases)
         {

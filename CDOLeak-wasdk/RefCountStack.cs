@@ -183,7 +183,8 @@ namespace CDOLeak_wasdk
                         _identified = true;
                     }
                     else if (stackLine.Function.Contains("Release")
-                        || (stackLine.Function.Contains("::Resolve") && stackLine.Offset.Contains("0x3b")))
+                        || (stackLine.Function.Contains("::Resolve") && stackLine.Offset.Contains("0x3b"))
+                        || (stackLine.Function.Contains("PAL_InterlockedDecrement")))
                     {
                         _isAddRef = false;
                         _identified = true;

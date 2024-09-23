@@ -14,6 +14,8 @@ namespace CDOLeak_wasdk
         private readonly string _function;
         private readonly string _offset;
 
+        public string Function { get { return _function; } }
+
         public string ModuleAndFunction
         {
             get
@@ -21,6 +23,14 @@ namespace CDOLeak_wasdk
                 return string.IsNullOrEmpty(_module)
                     ? _function
                     : _module + '!' + _function;
+            }
+        }
+
+        public string ModuleFunctionAndOffset
+        {
+            get
+            {
+                return ModuleAndFunction + _offset;
             }
         }
 
@@ -196,6 +206,7 @@ namespace CDOLeak_wasdk
                 else
                 {
                     Debug.Assert(false, "stack has already been found, it shouldn't be found a second time");
+                    // could be multiple AddRefs by the same stack
                 }
             }
             else

@@ -20,7 +20,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition />
             <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="300" />
+            <ColumnDefinition Width="450" />
         </Grid.ColumnDefinitions>
 
         <StackPanel Orientation="Horizontal" Grid.ColumnSpan="3">
@@ -29,7 +29,6 @@
             <Button Tapped="ExpandAll_Tapped">Expand All</Button>
             <Button Tapped="CollapseAnnotated_Tapped">Collapse Annotated</Button>
             <Button Tapped="ClearAnnotations_Tapped">Clear Annotations</Button>
-            <Button Tapped="Heuristics_Tapped">Apply Heuristics File</Button>
             <Button Tapped="ClearHighlights_Tapped">Clear Highlights</Button>
             <TextBox x:Name="SearchText" GotFocus="SearchText_GotFocus" KeyDown="SearchText_KeyDown" MinWidth="300" Text="Search"></TextBox>
             <CheckBox x:Name="SearchCollapsed"/>
@@ -43,8 +42,6 @@
 
         <t:GridSplitter ResizeDirection="Columns" Grid.Column="1" Grid.Row="1" />
 
-        <ScrollViewer Grid.Column="2" Grid.Row="1" HorizontalScrollBarVisibility="Auto" >
-            <StackPanel x:Name="_logPanel" />
-        </ScrollViewer>
+        <local:HeuristicsView x:Name="_heuristicsView" Grid.Column="2" Grid.Row="1" />
     </Grid>
 </Window>

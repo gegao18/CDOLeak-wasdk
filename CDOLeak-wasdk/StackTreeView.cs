@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Core;
@@ -26,6 +27,8 @@ namespace CDOLeak_wasdk
         private ScrollViewer _scrollViewer;
         private StackPanel _stackPanel;
 
+        private HeuristicsView _heuristicsView;
+
         // This is a flat list of all rows, with each row representing a stack frame.
         // The rows themselves have a tree structure (i.e. each frame can have a parent frame and multiple child frames),
         // but this is a flat list that contains everything in the tree.
@@ -37,7 +40,6 @@ namespace CDOLeak_wasdk
 
         private TextBlock _statusText;
         private TextBlock _virtualizationText;
-        private StackPanel _logPanel;
 
         public StackTreeView()
         {
@@ -126,11 +128,12 @@ namespace CDOLeak_wasdk
 
         #region Initialization
 
-        public void SetStackTree(StackTreeNode root, TextBlock statusText, TextBlock virtualizationText, StackPanel logPanel)
+        public void SetStackTree(StackTreeNode root, TextBlock statusText, TextBlock virtualizationText, HeuristicsView heuristicsView)
         {
             _statusText = statusText;
             _virtualizationText = virtualizationText;
-            _logPanel = logPanel;
+            _heuristicsView = heuristicsView;
+            _heuristicsView.StackTreeView = this;
 
             _rows.Clear();
             _rowsInView.Clear();
@@ -147,10 +150,11 @@ namespace CDOLeak_wasdk
             UpdateUIState();
         }
 
-        internal void AddRow(StackTreeNodeView row)
+        internal int AddRow(StackTreeNodeView row)
         {
             _rows.Add(row);
             _stackPanel.Children.Add(row);
+            return _rows.Count;
         }
 
         #endregion
@@ -235,6 +239,11 @@ namespace CDOLeak_wasdk
             }
 
             Focus(FocusState.Keyboard);
+        }
+
+        internal void RightClickRow(StackTreeNodeView row, RightTappedRoutedEventArgs e)
+        {
+            _heuristicsView.ShowRightClickMenu(row, e.GetPosition(row));
         }
 
         public void UpdateVirtualization()
@@ -469,89 +478,52 @@ namespace CDOLeak_wasdk
             }
         }
 
-        public void ApplyHeuristics(IEnumerable<AddRefReleaseHeuristic> heuristics)
+        public void ApplyHeuristic(HeuristicView heuristicView)
         {
             (List<MatchingStackTreeNodeView> AddRef, List<MatchingStackTreeNodeView> Release) addRefReleaseMatches = (null, null);
-
-            _logPanel.Children.Clear();
-
-            bool isFirstLogEntry = true;
-
-            foreach (AddRefReleaseHeuristic heuristic in heuristics)
+            int matchCount = 0;
+            int startIndex = 0;
+            do
             {
-                TextBlock ruleTextBlock = new TextBlock()
+                addRefReleaseMatches = heuristicView.Heuristic.FindMatchingUnannotatedAddRefRelease(_rows, startIndex);
+                if (addRefReleaseMatches.AddRef != null)
                 {
-                    Text = heuristic.Name,
-                    Margin = new Thickness(2, isFirstLogEntry ? 0 : 18, 0, 0),
-                    FontSize = 7,
-                };
-                _logPanel.Children.Add(ruleTextBlock);
-                isFirstLogEntry = false;
+                    // We found a match. If this was a wildcard scoped heuristic, it might be a partial match.
+                    // Update the start search index to skip this match next time.
+                    startIndex = addRefReleaseMatches.AddRef.Last().RowIndex + 1;
 
-                int matchCount = 0;
-                int startIndex = 0;
-                do
-                {
-                    addRefReleaseMatches = heuristic.FindMatchingUnannotatedAddRefRelease(_rows, startIndex);
-                    if (addRefReleaseMatches.AddRef != null)
+                    // Only update the annotations if it's a full match.
+                    if (addRefReleaseMatches.Release != null)
                     {
-                        // We found a match. If this was a wildcard scoped heuristic, it might be a partial match.
-                        // Update the start search index to skip this match next time.
-                        startIndex = addRefReleaseMatches.AddRef.Last().RowIndex + 1;
+                        matchCount++;
 
-                        // Only update the annotations if it's a full match.
-                        if (addRefReleaseMatches.Release != null)
-                        {
-                            matchCount++;
-                            ruleTextBlock.FontSize = 14;
+                        heuristicView.AddAddRef(this, addRefReleaseMatches.AddRef);
+                        heuristicView.AddRelease(this, addRefReleaseMatches.Release);
 
-                            TextBlock addRefLog = new TextBlock()
-                            {
-                                Text = String.Format("  - AddRef at {0},", addRefReleaseMatches.AddRef.Last().StackTreeNodeView.Node.DisplayString),
-                                Margin = new Thickness(2, 0, 0, 0),
-                            };
-                            StackTreeNodeView addRefStackTreeNodeView = addRefReleaseMatches.AddRef.Last().StackTreeNodeView;
-                            addRefLog.Tapped += (sender, e) => { ScrollIntoView(addRefStackTreeNodeView); };
-                            _logPanel.Children.Add(addRefLog);
+                        addRefReleaseMatches.AddRef.Last().StackTreeNodeView.Node.Comments = "[AddRef for " + heuristicView.Heuristic.Name + ": match #" + matchCount + "]";
+                        addRefReleaseMatches.Release.Last().StackTreeNodeView.Node.Comments = "[Release for " + heuristicView.Heuristic.Name + ": match #" + matchCount + "]";
 
-                            TextBlock releaseLog = new TextBlock()
-                            {
-                                Text = String.Format("       Release at {0}", addRefReleaseMatches.Release.Last().StackTreeNodeView.Node.DisplayString),
-                                Margin = new Thickness(2, 0, 0, 0),
-                            };
-                            StackTreeNodeView releaseStackTreeNodeView = addRefReleaseMatches.Release.Last().StackTreeNodeView;
-                            releaseLog.Tapped += (sender, e) => { ScrollIntoView(releaseStackTreeNodeView); };
-                            _logPanel.Children.Add(releaseLog);
-
-                            addRefReleaseMatches.AddRef.Last().StackTreeNodeView.Node.Comments = "[AddRef for " + heuristic.Name + ": match #" + matchCount + "]";
-                            addRefReleaseMatches.Release.Last().StackTreeNodeView.Node.Comments = "[Release for " + heuristic.Name + ": match #" + matchCount + "]";
-
-                            addRefReleaseMatches.AddRef.Last().StackTreeNodeView.UpdateCommentTextBlock();
-                            addRefReleaseMatches.Release.Last().StackTreeNodeView.UpdateCommentTextBlock();
-                        }
+                        addRefReleaseMatches.AddRef.Last().StackTreeNodeView.UpdateCommentTextBlock();
+                        addRefReleaseMatches.Release.Last().StackTreeNodeView.UpdateCommentTextBlock();
                     }
-                } while (addRefReleaseMatches.AddRef != null);
-
-                if (matchCount > 0)
-                {
-                    _logPanel.Children.Add(new TextBlock()
-                    {
-                        Text = String.Format("  {0} matches found", matchCount),
-                        Margin = new Thickness(2, 0, 0, 0),
-                    });
                 }
+            } while (addRefReleaseMatches.AddRef != null);
 
-                // Propagate right away to mark completely covered branches. Otherwise the next
-                // heuristic might mark something along an already covered branch.
-                PropagateAllAnnotationsUp();
+            if (matchCount > 0)
+            {
+                heuristicView.SetTotal(matchCount);
             }
+
+            // Propagate right away to mark completely covered branches. Otherwise the next
+            // heuristic might mark something along an already covered branch.
+            PropagateAllAnnotationsUp();
 
             CollapseAnnotated();
 
             UpdateUIState();
         }
 
-        void ScrollIntoView(StackTreeNodeView nodeView)
+        internal void ScrollIntoView(StackTreeNodeView nodeView)
         {
             bool wasExpanded = ExpandAll();
             if (wasExpanded)
@@ -562,7 +534,7 @@ namespace CDOLeak_wasdk
             GeneralTransform transform = nodeView.TransformToVisual(_stackPanel);
             double offsetY = transform.TransformPoint(new Point(0, 0)).Y;
             _scrollViewer.ScrollToVerticalOffset(offsetY);
-            nodeView.Highlight();
+            nodeView.IsHighlighted = true;
             _highlightedRows.Add(nodeView);
         }
 
@@ -570,7 +542,7 @@ namespace CDOLeak_wasdk
         {
             foreach (var node in _highlightedRows)
             {
-                node.RemoveHighlight();
+                node.IsHighlighted = false;
             }
             _highlightedRows.Clear();
         }

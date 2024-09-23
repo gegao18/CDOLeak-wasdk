@@ -1,4 +1,5 @@
 ﻿using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -36,6 +37,20 @@ namespace CDOLeak_wasdk
             }
         }
 
+        private bool _isHighlighted;
+        public bool IsHighlighted
+        {
+            get { return _isHighlighted; }
+            set
+            {
+                _isHighlighted = value;
+                Background = _isSelected
+                    ? SelectedBrush
+                    : _isHighlighted ? HighlightedBrush : UnselectedBrush;
+            }
+        }
+        private static readonly Brush HighlightedBrush = new SolidColorBrush(Colors.Yellow);
+
         private bool _isSelected;
         public bool IsSelected
         {
@@ -43,7 +58,9 @@ namespace CDOLeak_wasdk
             internal set
             {
                 _isSelected = value;
-                Background = _isSelected ? SelectedBrush : UnselectedBrush;
+                Background = _isSelected
+                    ? SelectedBrush
+                    : _isHighlighted ? HighlightedBrush : UnselectedBrush;
             }
         }
         private static readonly Brush SelectedBrush = new SolidColorBrush(Colors.DarkBlue);
@@ -51,6 +68,9 @@ namespace CDOLeak_wasdk
 
         private bool _isVirtualized;
         public bool IsVirtualized { get { return _isVirtualized; } }
+
+        public int LineNumber { get; private set; }
+        private TextBlock _lineNumberTextBlock;
 
         private TextBlock _expandCollapse;
         private const string CollapsedGlyph = "\uE76C";
@@ -63,7 +83,6 @@ namespace CDOLeak_wasdk
         private TextBlock _refCount;
         private static readonly Brush PositiveBrush = new SolidColorBrush(Colors.Red);
         private static readonly Brush NegativeBrush = new SolidColorBrush(Colors.Green);
-        private static readonly Brush HighlightedBrush = new SolidColorBrush(Colors.Yellow);
 
         private TextBlock _displayText;
 
@@ -98,10 +117,11 @@ namespace CDOLeak_wasdk
             Height = 24;
             Orientation = Orientation.Horizontal;
             Tapped += StackTreeNodeView_Tapped;
+            RightTapped += StackTreeNodeView_RightTapped;
 
             EnsureControls();
 
-            stackTreeView.AddRow(this);
+            LineNumber = stackTreeView.AddRow(this);
 
             CreateChildViews(_level);
 
@@ -117,6 +137,17 @@ namespace CDOLeak_wasdk
             if (!IsVirtualized
                 && _indent == null)
             {
+                _lineNumberTextBlock = new TextBlock()
+                {
+                    Text = LineNumber.ToString(),
+                    FontSize = 12,
+                    Margin = new Thickness(4, 0, 7, 0),
+                    Width = 30,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextAlignment = TextAlignment.Right,
+                };
+                Children.Add(_lineNumberTextBlock);
+
                 if (CanExpand)
                 {
                     _expandCollapse = new TextBlock()
@@ -140,12 +171,14 @@ namespace CDOLeak_wasdk
                     Text = Node.DisplayString,
                     Margin = new Thickness(0, 2, 0, 2),
                     VerticalAlignment = VerticalAlignment.Center,
-                    IsTextSelectionEnabled = true,
+                    IsTextSelectionEnabled = false,
                 };
                 if (!Node.Children.Any())
                 {
                     _displayText.Foreground = Node.RefCountDiff > 0 ? PositiveBrush : NegativeBrush;
                 }
+                _displayText.Tapped += StackTreeNodeView_Tapped;
+                _displayText.RightTapped += StackTreeNodeView_RightTapped;
                 Children.Add(_displayText);
 
                 if (!string.IsNullOrEmpty(Node.Position))
@@ -172,19 +205,12 @@ namespace CDOLeak_wasdk
 
         private void _tt_PointerExited(object sender, PointerRoutedEventArgs e)
         {
-            if (_oldCursor != null)
-            {
-                Window.Current.CoreWindow.PointerCursor = _oldCursor;
-            }
+            ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         }
 
         private void _tt_PointerEntered(object sender, PointerRoutedEventArgs e)
         {
-            if (_oldCursor == null)
-            {
-                _oldCursor = Window.Current.CoreWindow.PointerCursor;
-            }
-            Window.Current.CoreWindow.PointerCursor = _handCursor;
+            ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
         }
 
         private void _tt_Tapped(object sender, TappedRoutedEventArgs e)
@@ -209,6 +235,12 @@ namespace CDOLeak_wasdk
         private void StackTreeNodeView_Tapped(object sender, TappedRoutedEventArgs e)
         {
             _stackTreeView.SelectRow(this);
+        }
+
+        private void StackTreeNodeView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            _stackTreeView.SelectRow(this);
+            _stackTreeView.RightClickRow(this, e);
         }
 
         public void UpdateLabel()
@@ -609,15 +641,5 @@ namespace CDOLeak_wasdk
         }
 
         #endregion
-
-        public void Highlight()
-        {
-            Background = HighlightedBrush;
-        }
-
-        public void RemoveHighlight()
-        {
-            Background = null;
-        }
     }
 }

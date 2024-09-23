@@ -32,6 +32,7 @@ namespace CDOLeak_wasdk
         public MainWindow()
         {
             this.InitializeComponent();
+            _heuristicsView.WindowHandle = WindowNative.GetWindowHandle(this);
         }
 
         private async void Load_Tapped(object sender, TappedRoutedEventArgs e)
@@ -109,7 +110,7 @@ namespace CDOLeak_wasdk
                 StackTreeNode root = StackTreeNode.StitchStacks(refCountStacks);
                 if (root.Children.Any())
                 {
-                    _stackTreeView.SetStackTree(root, _statusText, _virtualizationText, _logPanel);
+                    _stackTreeView.SetStackTree(root, _statusText, _virtualizationText, _heuristicsView);
                     _stackTreeView.ShowUnannotated();
                     _showingUnannotated = true;
                 }
@@ -148,85 +149,6 @@ namespace CDOLeak_wasdk
         private void ClearAnnotations_Tapped(object sender, TappedRoutedEventArgs e)
         {
             _stackTreeView.ClearAnnotations();
-        }
-
-        private async void Heuristics_Tapped(object sender, TappedRoutedEventArgs e)
-        {
-            FileOpenPicker picker = new FileOpenPicker();
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-            picker.FileTypeFilter.Add(".txt");
-
-            StorageFile file = await picker.PickSingleFileAsync();
-            if (file != null)
-            {
-                List<AddRefReleaseHeuristic> heuristics = new List<AddRefReleaseHeuristic>();
-
-                using (Stream stream = file.OpenStreamForReadAsync().Result)
-                {
-                    using (StreamReader sr = new StreamReader(stream))
-                    {
-                        string name = null;
-                        string scope = null;
-                        string addRef = null;
-                        List<string> releases = new List<string>();
-
-                        while (!sr.EndOfStream)
-                        {
-                            string line = sr.ReadLine().Trim();
-
-                            if (line.StartsWith(AddRefReleaseHeuristic.CommentKeyword))
-                            {
-                                // Ignore - comment
-                                continue;
-                            }
-                            else if (line.StartsWith(AddRefReleaseHeuristic.NameStartKeyword) && line.EndsWith(AddRefReleaseHeuristic.NameEndKeyword))
-                            {
-                                if (!string.IsNullOrEmpty(name)
-                                    // scope can be null
-                                    && !string.IsNullOrEmpty(addRef)
-                                    && releases.Any())
-                                {
-                                    heuristics.Add(new AddRefReleaseHeuristic(name, scope, addRef, releases));
-                                    name = null;
-                                    scope = null;
-                                    addRef = null;
-                                    releases = new List<string>();
-                                }
-
-                                name = line.Substring(1, line.Length - 2);
-                                continue;
-                            }
-                            else if (line.StartsWith(AddRefReleaseHeuristic.ScopeKeyword))
-                            {
-                                scope = line.Substring(1).Trim();
-                            }
-                            else if (line.StartsWith(AddRefReleaseHeuristic.AddRefKeyword))
-                            {
-                                addRef = line.Substring(1).Trim();
-                            }
-                            else if (line.StartsWith(AddRefReleaseHeuristic.ReleaseKeyword))
-                            {
-                                releases.Add(line.Substring(1).Trim());
-                            }
-                        }
-
-                        // At the end of the file, add the last heuristic. We won't have another name tag for this add.
-                        if (!string.IsNullOrEmpty(name)
-                            // scope can be null
-                            && !string.IsNullOrEmpty(addRef)
-                            && releases.Any())
-                        {
-                            heuristics.Add(new AddRefReleaseHeuristic(name, scope, addRef, releases));
-                            name = null;
-                            scope = null;
-                            addRef = null;
-                            releases = new List<string>();
-                        }
-                    }
-                }
-
-                _stackTreeView.ApplyHeuristics(heuristics);
-            }
         }
 
         private void SearchText_GotFocus(object sender, RoutedEventArgs e)
