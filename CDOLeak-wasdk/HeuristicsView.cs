@@ -29,6 +29,8 @@ namespace CDOLeak_wasdk
         internal nint WindowHandle { get; set; }
 
         private MenuFlyout RightClickMenu { get; set; }
+        private MenuFlyoutItem _addRefFlyoutItem;
+        private MenuFlyoutItem _releaseFlyoutItem;
 
         public string FileName { get; set; }
 
@@ -70,12 +72,12 @@ namespace CDOLeak_wasdk
             _stackPanel.Children.Add(_buttons);
 
             RightClickMenu = new MenuFlyout();
-            MenuFlyoutItem addRefThis = new MenuFlyoutItem() { Text = "This is an AddRef", };
-            addRefThis.Click += AddRefThis_Click;
-            RightClickMenu.Items.Add(addRefThis);
-            MenuFlyoutItem releaseThis = new MenuFlyoutItem() { Text = "This is a Release", };
-            releaseThis.Click += ReleaseThis_Click;
-            RightClickMenu.Items.Add(releaseThis);
+            _addRefFlyoutItem = new MenuFlyoutItem() { Text = "This is an AddRef", };
+            _addRefFlyoutItem.Click += AddRefThis_Click;
+            RightClickMenu.Items.Add(_addRefFlyoutItem);
+            _releaseFlyoutItem = new MenuFlyoutItem() { Text = "This is a Release", };
+            _releaseFlyoutItem.Click += ReleaseThis_Click;
+            RightClickMenu.Items.Add(_releaseFlyoutItem);
 
             Content = _scrollViewer;
         }
@@ -125,6 +127,9 @@ namespace CDOLeak_wasdk
                 StartNewHeuristic();
                 _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
                 _currentHeuristicView.RedrawUI();
+
+                _addRefFlyoutItem.Text = "This is the matching AddRef";
+                _releaseFlyoutItem.IsEnabled = false;
             }
             else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.AddRefString))
             {
@@ -140,6 +145,9 @@ namespace CDOLeak_wasdk
                 StartNewHeuristic();
                 _currentHeuristicView.Heuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
                 _currentHeuristicView.RedrawUI();
+
+                _addRefFlyoutItem.IsEnabled = false;
+                _releaseFlyoutItem.Text = "This is the matching Release";
             }
             else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.ReleaseString))
             {
@@ -165,6 +173,10 @@ namespace CDOLeak_wasdk
             StackTreeView.ApplyHeuristic(_currentHeuristicView);
 
             _currentHeuristicView = null;
+            _addRefFlyoutItem.Text = "This is an AddRef";
+            _addRefFlyoutItem.IsEnabled = true;
+            _releaseFlyoutItem.Text = "This is a Release";
+            _releaseFlyoutItem.IsEnabled = true;
         }
 
         #endregion
@@ -285,6 +297,11 @@ namespace CDOLeak_wasdk
             if (heuristic == _currentHeuristicView)
             {
                 _currentHeuristicView = null;
+
+                _addRefFlyoutItem.Text = "This is an AddRef";
+                _addRefFlyoutItem.IsEnabled = true;
+                _releaseFlyoutItem.Text = "This is a Release";
+                _releaseFlyoutItem.IsEnabled = true;
             }
 
             StackTreeView.ExpandAll();
