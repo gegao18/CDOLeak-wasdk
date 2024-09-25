@@ -114,6 +114,14 @@ namespace CDOLeak_wasdk
 
         #region Right click menu
 
+        internal void ResetRightClickMenu()
+        {
+            _addRefFlyoutItem.Text = "This is an AddRef";
+            _addRefFlyoutItem.IsEnabled = true;
+            _releaseFlyoutItem.Text = "This is a Release";
+            _releaseFlyoutItem.IsEnabled = true;
+        }
+
         internal void ShowRightClickMenu(StackTreeNodeView row, Point point)
         {
             _currentRow = row;
@@ -173,10 +181,7 @@ namespace CDOLeak_wasdk
             StackTreeView.ApplyHeuristic(_currentHeuristicView);
 
             _currentHeuristicView = null;
-            _addRefFlyoutItem.Text = "This is an AddRef";
-            _addRefFlyoutItem.IsEnabled = true;
-            _releaseFlyoutItem.Text = "This is a Release";
-            _releaseFlyoutItem.IsEnabled = true;
+            ResetRightClickMenu();
         }
 
         #endregion
@@ -297,11 +302,7 @@ namespace CDOLeak_wasdk
             if (heuristic == _currentHeuristicView)
             {
                 _currentHeuristicView = null;
-
-                _addRefFlyoutItem.Text = "This is an AddRef";
-                _addRefFlyoutItem.IsEnabled = true;
-                _releaseFlyoutItem.Text = "This is a Release";
-                _releaseFlyoutItem.IsEnabled = true;
+                ResetRightClickMenu();
             }
 
             StackTreeView.ExpandAll();
