@@ -113,6 +113,7 @@ namespace CDOLeak_wasdk
                     _stackTreeView.SetStackTree(root, _statusText, _virtualizationText, _heuristicsView);
                     _stackTreeView.ShowUnannotated();
                     _showingUnannotated = true;
+                    _heuristicsView.FileName = file.DisplayName;
                 }
             }
         }
@@ -120,6 +121,7 @@ namespace CDOLeak_wasdk
         private async void Save_Tapped(object sender, TappedRoutedEventArgs e)
         {
             FileSavePicker picker = new FileSavePicker();
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
             picker.FileTypeChoices.Add("Text file", new List<string>() { ".txt" });
 
             StorageFile file = await picker.PickSaveFileAsync();

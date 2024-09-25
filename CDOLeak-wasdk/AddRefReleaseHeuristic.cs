@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 
 namespace CDOLeak_wasdk
@@ -30,6 +31,11 @@ namespace CDOLeak_wasdk
         }
 
         public string Name { get; private set; }
+
+        public string AddRefString { get; set; }
+        public string ReleaseString { get; set; }
+        private IEnumerable<string> ReleaseStrings { get; set; }
+
         private HeuristicFrame[] _addRefPatterns;
         private List<HeuristicFrame[]> _releasePatterns;
         private bool _isScoped;
@@ -52,20 +58,36 @@ namespace CDOLeak_wasdk
 
         public void SetAddRef(string addRefPattern)
         {
+            AddRefString = addRefPattern;
             _addRefPatterns = new HeuristicFrame[1] { new HeuristicFrame() { Pattern = addRefPattern } };
         }
 
         public void SetRelease(string releasePattern)
         {
+            ReleaseString = releasePattern;
             _releasePatterns = new List<HeuristicFrame[]>()
             {
                 new HeuristicFrame[1] { new HeuristicFrame() { Pattern = releasePattern } }
             };
         }
 
+        public void WriteToStream(StreamWriter sw)
+        {
+            sw.WriteLine(string.Format("[{0}]", Name));
+            // does not include scope
+            sw.WriteLine(string.Format("[+ {0}]", AddRefString));
+            foreach(string release in ReleaseStrings)
+            {
+                sw.WriteLine(string.Format("[- {0}]", release));
+            }
+        }
+
         public AddRefReleaseHeuristic(string name, string scope, string addRef, IEnumerable<string> releases)
         {
             Name = name;
+            AddRefString = addRef;
+            ReleaseStrings = releases;
+            ReleaseString = string.Join(", ", ReleaseStrings);
 
             if (scope != null)
             {

@@ -18,17 +18,19 @@ namespace CDOLeak_wasdk
         private StackPanel _stackPanel;
         private TextBlock _header;
         private StackPanel _buttons;
-
-        private List<AddRefReleaseHeuristic> _heuristics = new List<AddRefReleaseHeuristic>();
+        
+        private List<HeuristicView> _heuristics = new List<HeuristicView>();
 
         private StackTreeNodeView _currentRow; // The right-clicked row in the StackTreeView
-        private AddRefReleaseHeuristic _currentHeuristic;   // Currently being built by the UI
+        private HeuristicView _currentHeuristicView;    // Currently being built by the UI
 
         internal StackTreeView StackTreeView { get; set; }
 
         internal nint WindowHandle { get; set; }
 
         private MenuFlyout RightClickMenu { get; set; }
+
+        public string FileName { get; set; }
 
         public HeuristicsView()
         {
@@ -53,6 +55,9 @@ namespace CDOLeak_wasdk
             Button save = new Button() { Content = "Save", };
             save.Tapped += Save_Tapped;
             _buttons.Children.Add(save);
+            Button collapseAll = new Button() { Content = "Collapse all", };
+            collapseAll.Tapped += CollapseAll_Tapped;
+            _buttons.Children.Add(collapseAll);
 
             RightClickMenu = new MenuFlyout();
             MenuFlyoutItem addRefThis = new MenuFlyoutItem() { Text = "AddRef this", };
@@ -66,6 +71,19 @@ namespace CDOLeak_wasdk
             Content = _scrollViewer;
         }
 
+        private void CollapseAll_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            CollapseAll();
+        }
+
+        private void CollapseAll()
+        {
+            foreach (HeuristicView view in _heuristics)
+            {
+                view.IsExpanded = false;
+            }
+        }
+
         internal void ShowRightClickMenu(StackTreeNodeView row, Point point)
         {
             _currentRow = row;
@@ -74,24 +92,29 @@ namespace CDOLeak_wasdk
 
         private void ReleaseThis_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentHeuristic != null)
+            if (_currentHeuristicView != null)
             {
-                _currentHeuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
+                CollapseAll();
+                _currentHeuristicView.IsExpanded = true;
+                _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
 
-                _heuristics.Add(_currentHeuristic);
-                HeuristicView newView = new HeuristicView(_currentHeuristic);
-                _stackPanel.Children.Add(newView);
-                StackTreeView.ApplyHeuristic(newView);
-                _currentHeuristic = null;
+                _currentHeuristicView.RedrawUI();
+                StackTreeView.ApplyHeuristic(_currentHeuristicView);
+
+                _currentHeuristicView = null;
             }
         }
 
         private void AddRefThis_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentHeuristic == null)
+            if (_currentHeuristicView == null)
             {
-                _currentHeuristic = new AddRefReleaseHeuristic(_currentRow.Node.Function);
-                _currentHeuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
+                AddRefReleaseHeuristic currentHeuristic = new AddRefReleaseHeuristic(_currentRow.Node.Function);
+                currentHeuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
+
+                _currentHeuristicView = new HeuristicView(this, currentHeuristic);
+                _heuristics.Add(_currentHeuristicView);
+                _stackPanel.Children.Add(_currentHeuristicView);
             }
         }
 
@@ -99,11 +122,22 @@ namespace CDOLeak_wasdk
         {
             FileSavePicker picker = new FileSavePicker();
             InitializeWithWindow.Initialize(picker, WindowHandle);
-            picker.FileTypeChoices.Add("Text files", new List<string>(){ ".txt" });
+            picker.FileTypeChoices.Add("Text files", new List<string>() { ".txt" });
+            picker.SuggestedFileName = FileName + "_heuristics.txt";
 
             StorageFile file = await picker.PickSaveFileAsync();
             if (file != null)
             {
+                using (Stream stream = file.OpenStreamForWriteAsync().Result)
+                {
+                    using (StreamWriter sw = new StreamWriter(stream))
+                    {
+                        foreach (HeuristicView heuristic in _heuristics)
+                        {
+                            heuristic.Heuristic.WriteToStream(sw);
+                        }
+                    }
+                }
             }
         }
 
@@ -184,9 +218,9 @@ namespace CDOLeak_wasdk
 
                 foreach (AddRefReleaseHeuristic heuristic in heuristics)
                 {
-                    HeuristicView heuristicView = new HeuristicView(heuristic);
+                    HeuristicView heuristicView = new HeuristicView(this, heuristic);
                     _stackPanel.Children.Add(heuristicView);
-                    
+
                     StackTreeView.ApplyHeuristic(heuristicView);
                 }
             }
@@ -197,6 +231,21 @@ namespace CDOLeak_wasdk
             _stackPanel.Children.Clear();
             _stackPanel.Children.Add(_header);
             _stackPanel.Children.Add(_buttons);
+        }
+        
+        public void DeleteHeuristic(HeuristicView heuristic)
+        {
+            heuristic.Undo();
+            _stackPanel.Children.Remove(heuristic);
+
+            if (heuristic == _currentHeuristicView)
+            {
+                _currentHeuristicView = null;
+            }
+
+            StackTreeView.ExpandAll();
+            StackTreeView.CollapseAnnotated();
+            StackTreeView.UpdateUIState();
         }
     }
 }

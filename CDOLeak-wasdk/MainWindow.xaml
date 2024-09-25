@@ -20,10 +20,10 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition />
             <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="450" />
+            <ColumnDefinition Width="600" />
         </Grid.ColumnDefinitions>
 
-        <StackPanel Orientation="Horizontal" Grid.ColumnSpan="3">
+        <StackPanel Orientation="Horizontal" Grid.ColumnSpan="3" Margin="10,2,10,4">
             <Button Tapped="Load_Tapped">Load</Button>
             <Button Tapped="Save_Tapped">Save</Button>
             <Button Tapped="ExpandAll_Tapped">Expand All</Button>
@@ -36,7 +36,7 @@
         
         <local:StackTreeView x:Name="_stackTreeView" Grid.Row="1" Margin="0,0,0,2"/>
 
-        <TextBlock Grid.ColumnSpan="3" Grid.Row="2" x:Name="_statusText" HorizontalAlignment="Right" Margin="10,1" Tapped="StatusText_Tapped" Foreground="White"/>
+        <TextBlock Grid.ColumnSpan="3" Grid.Row="2" x:Name="_statusText" HorizontalAlignment="Right" Margin="10,4,10,2" Tapped="StatusText_Tapped" Foreground="White"/>
 
         <TextBlock Grid.ColumnSpan="3" Grid.Row="3" x:Name="_virtualizationText" HorizontalAlignment="Right" Margin="10,1" Foreground="White"/>
 
