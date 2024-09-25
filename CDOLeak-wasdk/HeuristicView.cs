@@ -11,7 +11,7 @@ namespace CDOLeak_wasdk
 {
     internal class HeuristicView : StackPanel
     {
-        private HeuristicsView Parent { get; set; }
+        private HeuristicsView ParentView { get; set; }
         public AddRefReleaseHeuristic Heuristic { get; private set; }
 
         private StackPanel _headerPanel;
@@ -51,7 +51,7 @@ namespace CDOLeak_wasdk
 
         public HeuristicView(HeuristicsView parent, AddRefReleaseHeuristic heuristic)
         {
-            Parent = parent;
+            ParentView = parent;
             Heuristic = heuristic;
 
             _expandCollapse = new TextBlock()
@@ -123,7 +123,7 @@ namespace CDOLeak_wasdk
             ContentDialogResult result = await dialog.ShowAsync();
             if (result == ContentDialogResult.Primary)
             {
-                Parent.DeleteHeuristic(this);
+                ParentView.DeleteHeuristic(this);
             }
         }
 
@@ -132,7 +132,7 @@ namespace CDOLeak_wasdk
             IsExpanded = !IsExpanded;
         }
 
-        internal void RedrawUI()
+        public void RedrawUI()
         {
             _addRef.Text = "AddRef: " + Heuristic.AddRefString;
             _release.Text = "Release: " + Heuristic.ReleaseString;

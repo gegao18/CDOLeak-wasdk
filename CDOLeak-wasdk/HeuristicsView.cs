@@ -18,7 +18,7 @@ namespace CDOLeak_wasdk
         private StackPanel _stackPanel;
         private TextBlock _header;
         private StackPanel _buttons;
-        
+
         private List<HeuristicView> _heuristics = new List<HeuristicView>();
 
         private StackTreeNodeView _currentRow; // The right-clicked row in the StackTreeView
@@ -42,11 +42,17 @@ namespace CDOLeak_wasdk
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Visible,
             };
 
-            _header = new TextBlock()
+            _stackPanel.Children.Add(new TextBlock()
             {
                 Text = "Heuristics",
                 FontSize = 19,
-            };
+            });
+
+            _stackPanel.Children.Add(new TextBlock()
+            {
+                Text = "Right click the tree view to define new AddRef/Release heuristics.",
+                Margin = new Thickness(0, 10, 0, 10),
+            });
 
             _buttons = new StackPanel() { Orientation = Orientation.Horizontal };
             Button load = new Button() { Content = "Load", };
@@ -58,18 +64,23 @@ namespace CDOLeak_wasdk
             Button collapseAll = new Button() { Content = "Collapse all", };
             collapseAll.Tapped += CollapseAll_Tapped;
             _buttons.Children.Add(collapseAll);
+            Button expandAll = new Button() { Content = "Expand all", };
+            expandAll.Tapped += ExpandAll_Tapped;
+            _buttons.Children.Add(expandAll);
+            _stackPanel.Children.Add(_buttons);
 
             RightClickMenu = new MenuFlyout();
-            MenuFlyoutItem addRefThis = new MenuFlyoutItem() { Text = "AddRef this", };
+            MenuFlyoutItem addRefThis = new MenuFlyoutItem() { Text = "This is an AddRef", };
             addRefThis.Click += AddRefThis_Click;
             RightClickMenu.Items.Add(addRefThis);
-            MenuFlyoutItem releaseThis = new MenuFlyoutItem() { Text = "Release this", };
+            MenuFlyoutItem releaseThis = new MenuFlyoutItem() { Text = "This is a Release", };
             releaseThis.Click += ReleaseThis_Click;
             RightClickMenu.Items.Add(releaseThis);
 
-            ResetUI();
             Content = _scrollViewer;
         }
+
+        #region Expand/collapse
 
         private void CollapseAll_Tapped(object sender, TappedRoutedEventArgs e)
         {
@@ -84,6 +95,23 @@ namespace CDOLeak_wasdk
             }
         }
 
+        private void ExpandAll_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            ExpandAll();
+        }
+
+        private void ExpandAll()
+        {
+            foreach (HeuristicView view in _heuristics)
+            {
+                view.IsExpanded = true;
+            }
+        }
+
+        #endregion
+
+        #region Right click menu
+
         internal void ShowRightClickMenu(StackTreeNodeView row, Point point)
         {
             _currentRow = row;
@@ -92,16 +120,16 @@ namespace CDOLeak_wasdk
 
         private void ReleaseThis_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentHeuristicView != null)
+            if (_currentHeuristicView == null)
             {
-                CollapseAll();
-                _currentHeuristicView.IsExpanded = true;
+                StartNewHeuristic();
                 _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
-
                 _currentHeuristicView.RedrawUI();
-                StackTreeView.ApplyHeuristic(_currentHeuristicView);
-
-                _currentHeuristicView = null;
+            }
+            else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.AddRefString))
+            {
+                _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
+                CompleteCurrentHeuristic();
             }
         }
 
@@ -109,14 +137,37 @@ namespace CDOLeak_wasdk
         {
             if (_currentHeuristicView == null)
             {
-                AddRefReleaseHeuristic currentHeuristic = new AddRefReleaseHeuristic(_currentRow.Node.Function);
-                currentHeuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
-
-                _currentHeuristicView = new HeuristicView(this, currentHeuristic);
-                _heuristics.Add(_currentHeuristicView);
-                _stackPanel.Children.Add(_currentHeuristicView);
+                StartNewHeuristic();
+                _currentHeuristicView.Heuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
+                _currentHeuristicView.RedrawUI();
+            }
+            else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.ReleaseString))
+            {
+                _currentHeuristicView.Heuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
+                CompleteCurrentHeuristic();
             }
         }
+
+        private void StartNewHeuristic()
+        {
+            AddRefReleaseHeuristic currentHeuristic = new AddRefReleaseHeuristic(_currentRow.Node.Function);
+            _currentHeuristicView = new HeuristicView(this, currentHeuristic);
+            _heuristics.Add(_currentHeuristicView);
+            _stackPanel.Children.Add(_currentHeuristicView);
+        }
+
+        private void CompleteCurrentHeuristic()
+        {
+            CollapseAll();
+            _currentHeuristicView.IsExpanded = true;
+
+            _currentHeuristicView.RedrawUI();
+            StackTreeView.ApplyHeuristic(_currentHeuristicView);
+
+            _currentHeuristicView = null;
+        }
+
+        #endregion
 
         private async void Save_Tapped(object sender, TappedRoutedEventArgs e)
         {
@@ -226,13 +277,6 @@ namespace CDOLeak_wasdk
             }
         }
 
-        internal void ResetUI()
-        {
-            _stackPanel.Children.Clear();
-            _stackPanel.Children.Add(_header);
-            _stackPanel.Children.Add(_buttons);
-        }
-        
         public void DeleteHeuristic(HeuristicView heuristic)
         {
             heuristic.Undo();
