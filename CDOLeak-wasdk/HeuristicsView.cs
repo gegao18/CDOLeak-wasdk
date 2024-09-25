@@ -15,11 +15,9 @@ namespace CDOLeak_wasdk
     internal class HeuristicsView : UserControl
     {
         private ScrollViewer _scrollViewer;
-        private StackPanel _stackPanel;
         private TextBlock _header;
         private StackPanel _buttons;
-
-        private List<HeuristicView> _heuristics = new List<HeuristicView>();
+        private StackPanel _contentPanel;   // Contains all HeuristicViews
 
         private StackTreeNodeView _currentRow; // The right-clicked row in the StackTreeView
         private HeuristicView _currentHeuristicView;    // Currently being built by the UI
@@ -36,21 +34,15 @@ namespace CDOLeak_wasdk
 
         public HeuristicsView()
         {
-            _stackPanel = new StackPanel() { Margin = new Thickness(2, 0, 0, 0), };
-            _scrollViewer = new ScrollViewer()
-            {
-                Content = _stackPanel,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Visible,
-            };
+            StackPanel stackPanel = new StackPanel() { Margin = new Thickness(2, 0, 0, 0), };
 
-            _stackPanel.Children.Add(new TextBlock()
+            stackPanel.Children.Add(new TextBlock()
             {
                 Text = "Heuristics",
                 FontSize = 19,
             });
 
-            _stackPanel.Children.Add(new TextBlock()
+            stackPanel.Children.Add(new TextBlock()
             {
                 Text = "Right click the tree view to define new AddRef/Release heuristics.",
                 Margin = new Thickness(0, 10, 0, 10),
@@ -69,7 +61,13 @@ namespace CDOLeak_wasdk
             Button expandAll = new Button() { Content = "Expand all", };
             expandAll.Tapped += ExpandAll_Tapped;
             _buttons.Children.Add(expandAll);
-            _stackPanel.Children.Add(_buttons);
+            Button clearAll = new Button() { Content = "Clear all", };
+            clearAll.Tapped += ClearAll_Tapped;
+            _buttons.Children.Add(clearAll);
+            stackPanel.Children.Add(_buttons);
+
+            _contentPanel = new StackPanel();
+            stackPanel.Children.Add(_contentPanel);
 
             RightClickMenu = new MenuFlyout();
             _addRefFlyoutItem = new MenuFlyoutItem() { Text = "This is an AddRef", };
@@ -79,6 +77,12 @@ namespace CDOLeak_wasdk
             _releaseFlyoutItem.Click += ReleaseThis_Click;
             RightClickMenu.Items.Add(_releaseFlyoutItem);
 
+            _scrollViewer = new ScrollViewer()
+            {
+                Content = stackPanel,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Visible,
+            };
             Content = _scrollViewer;
         }
 
@@ -91,7 +95,7 @@ namespace CDOLeak_wasdk
 
         private void CollapseAll()
         {
-            foreach (HeuristicView view in _heuristics)
+            foreach (HeuristicView view in _contentPanel.Children)
             {
                 view.IsExpanded = false;
             }
@@ -104,7 +108,7 @@ namespace CDOLeak_wasdk
 
         private void ExpandAll()
         {
-            foreach (HeuristicView view in _heuristics)
+            foreach (HeuristicView view in _contentPanel.Children)
             {
                 view.IsExpanded = true;
             }
@@ -168,8 +172,7 @@ namespace CDOLeak_wasdk
         {
             AddRefReleaseHeuristic currentHeuristic = new AddRefReleaseHeuristic(_currentRow.Node.Function);
             _currentHeuristicView = new HeuristicView(this, currentHeuristic);
-            _heuristics.Add(_currentHeuristicView);
-            _stackPanel.Children.Add(_currentHeuristicView);
+            _contentPanel.Children.Add(_currentHeuristicView);
         }
 
         private void CompleteCurrentHeuristic()
@@ -182,6 +185,55 @@ namespace CDOLeak_wasdk
 
             _currentHeuristicView = null;
             ResetRightClickMenu();
+        }
+
+        #endregion
+
+        #region Deleting
+
+        public void DeleteHeuristic(HeuristicView heuristicView)
+        {
+            heuristicView.Undo();
+            _contentPanel.Children.Remove(heuristicView);
+
+            if (heuristicView == _currentHeuristicView)
+            {
+                _currentHeuristicView = null;
+                ResetRightClickMenu();
+            }
+
+            StackTreeView.ExpandAll();
+            StackTreeView.CollapseAnnotated();
+            StackTreeView.UpdateUIState();
+        }
+
+        private async void ClearAll_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            ContentDialog dialog = new ContentDialog()
+            {
+                XamlRoot = this.XamlRoot,
+                Title = "Delete all heuristics",
+                Content = "Delete all heuristics and reset the entire tree?",
+                IsPrimaryButtonEnabled = true,
+                IsSecondaryButtonEnabled = true,
+                PrimaryButtonText = "Delete all",
+                SecondaryButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+            };
+
+            ContentDialogResult result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                foreach (HeuristicView heuristicView in _contentPanel.Children)
+                {
+                    heuristicView.Undo();
+                }
+
+                _contentPanel.Children.Clear();
+
+                StackTreeView.ExpandAll();
+                StackTreeView.UpdateUIState();
+            }
         }
 
         #endregion
@@ -200,7 +252,7 @@ namespace CDOLeak_wasdk
                 {
                     using (StreamWriter sw = new StreamWriter(stream))
                     {
-                        foreach (HeuristicView heuristic in _heuristics)
+                        foreach (HeuristicView heuristic in _contentPanel.Children)
                         {
                             heuristic.Heuristic.WriteToStream(sw);
                         }
@@ -287,27 +339,11 @@ namespace CDOLeak_wasdk
                 foreach (AddRefReleaseHeuristic heuristic in heuristics)
                 {
                     HeuristicView heuristicView = new HeuristicView(this, heuristic);
-                    _stackPanel.Children.Add(heuristicView);
+                    _contentPanel.Children.Add(heuristicView);
 
                     StackTreeView.ApplyHeuristic(heuristicView);
                 }
             }
-        }
-
-        public void DeleteHeuristic(HeuristicView heuristic)
-        {
-            heuristic.Undo();
-            _stackPanel.Children.Remove(heuristic);
-
-            if (heuristic == _currentHeuristicView)
-            {
-                _currentHeuristicView = null;
-                ResetRightClickMenu();
-            }
-
-            StackTreeView.ExpandAll();
-            StackTreeView.CollapseAnnotated();
-            StackTreeView.UpdateUIState();
         }
     }
 }
