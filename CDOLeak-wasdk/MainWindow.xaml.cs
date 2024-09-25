@@ -18,6 +18,7 @@ using Windows.System;
 using Windows.UI.Core;
 using WinRT.Interop;
 using System.Diagnostics;
+using Microsoft.UI.Input;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -116,6 +117,7 @@ namespace CDOLeak_wasdk
                     _stackTreeView.ShowUnannotated();
                     _showingUnannotated = true;
                     _heuristicsView.FileName = file.DisplayName;
+                    _heuristicsView.ClearAll();
                 }
             }
         }
@@ -173,7 +175,7 @@ namespace CDOLeak_wasdk
         private void Page_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == VirtualKey.F
-                && Window.Current.CoreWindow.GetKeyState(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down))
+                && InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down))
             {
                 SearchText.Focus(FocusState.Keyboard);
             }

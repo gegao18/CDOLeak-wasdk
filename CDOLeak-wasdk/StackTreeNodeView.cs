@@ -69,7 +69,6 @@ namespace CDOLeak_wasdk
         private bool _isVirtualized;
         public bool IsVirtualized { get { return _isVirtualized; } }
 
-        public int LineNumber { get; private set; }
         private TextBlock _lineNumberTextBlock;
 
         private TextBlock _expandCollapse;
@@ -121,7 +120,7 @@ namespace CDOLeak_wasdk
 
             EnsureControls();
 
-            LineNumber = stackTreeView.AddRow(this);
+            stackTreeView.AddRow(this);
 
             CreateChildViews(_level);
 
@@ -139,7 +138,7 @@ namespace CDOLeak_wasdk
             {
                 _lineNumberTextBlock = new TextBlock()
                 {
-                    Text = LineNumber.ToString(),
+                    Text = Node.LineNumber.ToString(),
                     FontSize = 12,
                     Margin = new Thickness(4, 0, 7, 0),
                     Width = 30,
@@ -540,6 +539,7 @@ namespace CDOLeak_wasdk
             EnsureCommentsControls();
             Children.Remove(_comments);
             Children.Add(_commentsEdit);
+            _commentsEdit.Text = Node.Comments;
 
             _commentsEdit.Focus(FocusState.Keyboard);
         }

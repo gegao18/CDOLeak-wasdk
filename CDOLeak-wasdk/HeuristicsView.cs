@@ -27,8 +27,10 @@ namespace CDOLeak_wasdk
         internal nint WindowHandle { get; set; }
 
         private MenuFlyout RightClickMenu { get; set; }
-        private MenuFlyoutItem _addRefFlyoutItem;
-        private MenuFlyoutItem _releaseFlyoutItem;
+        private MenuFlyoutItem _addRefPatternFlyoutItem;
+        private MenuFlyoutItem _releasePatternFlyoutItem;
+        private MenuFlyoutItem _singleAddRefFlyoutItem;
+        private MenuFlyoutItem _singleReleaseFlyoutItem;
 
         public string FileName { get; set; }
 
@@ -70,12 +72,20 @@ namespace CDOLeak_wasdk
             stackPanel.Children.Add(_contentPanel);
 
             RightClickMenu = new MenuFlyout();
-            _addRefFlyoutItem = new MenuFlyoutItem() { Text = "This is an AddRef", };
-            _addRefFlyoutItem.Click += AddRefThis_Click;
-            RightClickMenu.Items.Add(_addRefFlyoutItem);
-            _releaseFlyoutItem = new MenuFlyoutItem() { Text = "This is a Release", };
-            _releaseFlyoutItem.Click += ReleaseThis_Click;
-            RightClickMenu.Items.Add(_releaseFlyoutItem);
+            _addRefPatternFlyoutItem = new MenuFlyoutItem();
+            _addRefPatternFlyoutItem.Click += AddRefPattern_Click;
+            RightClickMenu.Items.Add(_addRefPatternFlyoutItem);
+            _releasePatternFlyoutItem = new MenuFlyoutItem();
+            _releasePatternFlyoutItem.Click += ReleasePattern_Click;
+            RightClickMenu.Items.Add(_releasePatternFlyoutItem);
+            RightClickMenu.Items.Add(new MenuFlyoutSeparator());
+            _singleAddRefFlyoutItem = new MenuFlyoutItem();
+            _singleAddRefFlyoutItem.Click += SingleAddRef_Click;
+            RightClickMenu.Items.Add(_singleAddRefFlyoutItem);
+            _singleReleaseFlyoutItem = new MenuFlyoutItem();
+            _singleReleaseFlyoutItem.Click += SingleRelease_Click;
+            RightClickMenu.Items.Add(_singleReleaseFlyoutItem);
+            ResetRightClickMenu();
 
             _scrollViewer = new ScrollViewer()
             {
@@ -118,12 +128,25 @@ namespace CDOLeak_wasdk
 
         #region Right click menu
 
-        internal void ResetRightClickMenu()
+        private void ResetRightClickMenu()
         {
-            _addRefFlyoutItem.Text = "This is an AddRef";
-            _addRefFlyoutItem.IsEnabled = true;
-            _releaseFlyoutItem.Text = "This is a Release";
-            _releaseFlyoutItem.IsEnabled = true;
+            _addRefPatternFlyoutItem.Text = "This is an AddRef pattern";
+            _addRefPatternFlyoutItem.IsEnabled = true;
+            _releasePatternFlyoutItem.Text = "This is a Release pattern";
+            _releasePatternFlyoutItem.IsEnabled = true;
+
+            _singleAddRefFlyoutItem.Text = "This is a single AddRef";
+            _singleAddRefFlyoutItem.IsEnabled = true;
+            _singleReleaseFlyoutItem.Text = "This is a single Release";
+            _singleReleaseFlyoutItem.IsEnabled = true;
+        }
+
+        private void DisableRightClickMenu()
+        {
+            _addRefPatternFlyoutItem.IsEnabled = false;
+            _releasePatternFlyoutItem.IsEnabled = false;
+            _singleAddRefFlyoutItem.IsEnabled = false;
+            _singleReleaseFlyoutItem.IsEnabled = false;
         }
 
         internal void ShowRightClickMenu(StackTreeNodeView row, Point point)
@@ -132,47 +155,111 @@ namespace CDOLeak_wasdk
             RightClickMenu.ShowAt(row, point);
         }
 
-        private void ReleaseThis_Click(object sender, RoutedEventArgs e)
+        private void AddRefPattern_Click(object sender, RoutedEventArgs e)
         {
+            bool createdNewHeuristic = false;
             if (_currentHeuristicView == null)
             {
                 StartNewHeuristic();
-                _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
-                _currentHeuristicView.RedrawUI();
-
-                _addRefFlyoutItem.Text = "This is the matching AddRef";
-                _releaseFlyoutItem.IsEnabled = false;
+                createdNewHeuristic = true;
             }
-            else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.AddRefString))
+
+            _currentHeuristicView.Heuristic.Name = string.Format("{0} pattern{1}", _currentRow.Node.Function, _contentPanel.Children.Count);
+            _currentHeuristicView.Heuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
+            _currentHeuristicView.RedrawUI();
+
+            if (createdNewHeuristic)
             {
-                _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
+                _releasePatternFlyoutItem.Text = "This is the matching Release pattern";
+                _singleAddRefFlyoutItem.IsEnabled = false;
+                _singleReleaseFlyoutItem.IsEnabled = false;
+            }
+            else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.ReleaseString))
+            {
                 CompleteCurrentHeuristic();
             }
         }
 
-        private void AddRefThis_Click(object sender, RoutedEventArgs e)
+        private void ReleasePattern_Click(object sender, RoutedEventArgs e)
         {
+            bool createdNewHeuristic = false;
             if (_currentHeuristicView == null)
             {
                 StartNewHeuristic();
-                _currentHeuristicView.Heuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
-                _currentHeuristicView.RedrawUI();
-
-                _addRefFlyoutItem.IsEnabled = false;
-                _releaseFlyoutItem.Text = "This is the matching Release";
+                createdNewHeuristic = true;
             }
-            else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.ReleaseString))
+
+            _currentHeuristicView.Heuristic.Name = string.Format("{0} pattern{1}", _currentRow.Node.Function, _contentPanel.Children.Count);
+            _currentHeuristicView.Heuristic.SetRelease(_currentRow.Node.ModuleFunctionAndOffset);
+            _currentHeuristicView.RedrawUI();
+
+            if (createdNewHeuristic)
             {
-                _currentHeuristicView.Heuristic.SetAddRef(_currentRow.Node.ModuleFunctionAndOffset);
+                _addRefPatternFlyoutItem.Text = "This is the matching AddRef pattern";
+                _singleAddRefFlyoutItem.IsEnabled = false;
+                _singleReleaseFlyoutItem.IsEnabled = false;
+            }
+            else if (!string.IsNullOrEmpty(_currentHeuristicView.Heuristic.AddRefString))
+            {
                 CompleteCurrentHeuristic();
             }
         }
 
         private void StartNewHeuristic()
         {
-            AddRefReleaseHeuristic currentHeuristic = new AddRefReleaseHeuristic(_currentRow.Node.Function);
+            AddRefReleaseHeuristic currentHeuristic = new AddRefReleaseHeuristic();
             _currentHeuristicView = new HeuristicView(this, currentHeuristic);
             _contentPanel.Children.Add(_currentHeuristicView);
+        }
+
+        private void SingleAddRef_Click(object sender, RoutedEventArgs e)
+        {
+            bool createdNewHeuristic = false;
+            if (_currentHeuristicView == null)
+            {
+                StartNewHeuristic();
+                createdNewHeuristic = true;
+            }
+
+            _currentHeuristicView.Heuristic.Name = string.Format("{0} single line{1}", _currentRow.Node.Function, _contentPanel.Children.Count);
+            _currentHeuristicView.Heuristic.SetAddRefLine(_currentRow.Node.LineNumber);
+            _currentHeuristicView.RedrawUI();
+
+            if (createdNewHeuristic)
+            {
+                _singleReleaseFlyoutItem.Text = "This is the matching single Release";
+                _addRefPatternFlyoutItem.IsEnabled = false;
+                _releasePatternFlyoutItem.IsEnabled = false;
+            }
+            else if (_currentHeuristicView.Heuristic.ReleaseLine > 0)
+            {
+                CompleteCurrentHeuristic();
+            }
+        }
+
+        private void SingleRelease_Click(object sender, RoutedEventArgs e)
+        {
+            bool createdNewHeuristic = false;
+            if (_currentHeuristicView == null)
+            {
+                StartNewHeuristic();
+                createdNewHeuristic = true;
+            }
+
+            _currentHeuristicView.Heuristic.Name = string.Format("{0} single line{1}", _currentRow.Node.Function, _contentPanel.Children.Count);
+            _currentHeuristicView.Heuristic.SetReleaseLine(_currentRow.Node.LineNumber);
+            _currentHeuristicView.RedrawUI();
+
+            if (createdNewHeuristic)
+            {
+                _singleAddRefFlyoutItem.Text = "This is the matching single AddRef";
+                _addRefPatternFlyoutItem.IsEnabled = false;
+                _releasePatternFlyoutItem.IsEnabled = false;
+            }
+            else if (_currentHeuristicView.Heuristic.AddRefLine > 0)
+            {
+                CompleteCurrentHeuristic();
+            }
         }
 
         private void CompleteCurrentHeuristic()
@@ -229,11 +316,16 @@ namespace CDOLeak_wasdk
                     heuristicView.Undo();
                 }
 
-                _contentPanel.Children.Clear();
-
-                StackTreeView.ExpandAll();
-                StackTreeView.UpdateUIState();
+                ClearAll();
             }
+        }
+
+        public void ClearAll()
+        {
+            _contentPanel.Children.Clear();
+
+            StackTreeView.ExpandAll();
+            StackTreeView.UpdateUIState();
         }
 
         #endregion

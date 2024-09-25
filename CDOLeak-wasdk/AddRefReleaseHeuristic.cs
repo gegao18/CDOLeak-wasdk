@@ -5,18 +5,6 @@ using System.Linq;
 
 namespace CDOLeak_wasdk
 {
-    internal class MatchingStackTreeNodeView
-    {
-        public StackTreeNodeView StackTreeNodeView { get; private set; }
-        public int RowIndex { get; private set; }
-
-        public MatchingStackTreeNodeView(StackTreeNodeView stackTreeNodeView, int rowIndex)
-        {
-            StackTreeNodeView = stackTreeNodeView;
-            RowIndex = rowIndex;
-        }
-    }
-
     internal class AddRefReleaseHeuristic
     {
         private class HeuristicFrame
@@ -30,7 +18,11 @@ namespace CDOLeak_wasdk
             }
         }
 
-        public string Name { get; private set; }
+        public string Name { get; set; }
+
+        public bool IsLineMatch { get; private set; }
+        public int AddRefLine { get; private set; }
+        public int ReleaseLine { get; private set; }
 
         public string AddRefString { get; set; }
         public string ReleaseString { get; set; }
@@ -49,9 +41,8 @@ namespace CDOLeak_wasdk
         public const char NameStartKeyword = '[';
         public const char NameEndKeyword = ']';
 
-        public AddRefReleaseHeuristic(string name)
+        public AddRefReleaseHeuristic()
         {
-            Name = name;
             _addRefPatterns = new HeuristicFrame[1];
             _releasePatterns = new List<HeuristicFrame[]>();
         }
@@ -62,6 +53,12 @@ namespace CDOLeak_wasdk
             _addRefPatterns = new HeuristicFrame[1] { new HeuristicFrame() { Pattern = addRefPattern } };
         }
 
+        public void SetAddRefLine(int line)
+        {
+            AddRefLine = line;
+            IsLineMatch = true;
+        }
+
         public void SetRelease(string releasePattern)
         {
             ReleaseString = releasePattern;
@@ -69,6 +66,12 @@ namespace CDOLeak_wasdk
             {
                 new HeuristicFrame[1] { new HeuristicFrame() { Pattern = releasePattern } }
             };
+        }
+
+        public void SetReleaseLine(int line)
+        {
+            ReleaseLine = line;
+            IsLineMatch = true;
         }
 
         public void WriteToStream(StreamWriter sw)
@@ -157,13 +160,16 @@ namespace CDOLeak_wasdk
         // Can be done better. Make it all a top-down search
         // Add a range of [begin, end) to scope down the search and early exit. Child trees end at the parent's next sibling (or the end of the range).
         //
-        public (List<MatchingStackTreeNodeView> AddRef, List<MatchingStackTreeNodeView> Release) FindMatchingUnannotatedAddRefRelease(List<StackTreeNodeView> rows, int startIndex)
+        public (StackTreeNodeView AddRef, StackTreeNodeView Release) FindMatchingUnannotatedAddRefRelease(List<StackTreeNodeView> rows, int startIndex)
         {
-            List<MatchingStackTreeNodeView> addRefMatches = FindUnannotatedMatch(rows, startIndex, _addRefPatterns, 1);
+            // Line matches are done in StackTreeView.ApplyHeuristic directly
+            Debug.Assert(!IsLineMatch);
+
+            List<StackTreeNodeView> addRefMatches = FindUnannotatedMatch(rows, startIndex, _addRefPatterns, 1);
 
             if (addRefMatches != null)
             {
-                List<MatchingStackTreeNodeView> releaseMatches = null;
+                List<StackTreeNodeView> releaseMatches = null;
 
                 if (_isWildcardScoped)
                 {
@@ -194,7 +200,7 @@ namespace CDOLeak_wasdk
                     // So get the topmost AddRef match, walk to its parent to get the wildcard, then do a scoped search from that.
 
                     // Update the release patterns to include the wildcard.
-                    StackTreeNodeView wildcard = addRefMatches.First().StackTreeNodeView.ParentNodeView;
+                    StackTreeNodeView wildcard = addRefMatches.First().ParentNodeView;
 
                     HeuristicFrame wildcardFrame = new HeuristicFrame()
                     {
@@ -207,10 +213,10 @@ namespace CDOLeak_wasdk
                         List<HeuristicFrame> releaseFramesWithWildcard = new List<HeuristicFrame>() { wildcardFrame };
                         releaseFramesWithWildcard.AddRange(releaseFrames);
 
-                        List<MatchingStackTreeNodeView> thisMatch = FindMatchingReleaseInScope(rows, wildcard, releaseFramesWithWildcard.ToArray());
+                        List<StackTreeNodeView> thisMatch = FindMatchingReleaseInScope(rows, wildcard, releaseFramesWithWildcard.ToArray());
 
                         if (thisMatch != null &&
-                            (releaseMatches == null || thisMatch.Last().RowIndex < releaseMatches.Last().RowIndex))
+                            (releaseMatches == null || thisMatch.Last().Node.LineNumber < releaseMatches.Last().Node.LineNumber))
                         {
                             releaseMatches = thisMatch;
                         }
@@ -250,10 +256,10 @@ namespace CDOLeak_wasdk
 
                     foreach (HeuristicFrame[] releaseFrames in _releasePatterns)
                     {
-                        List<MatchingStackTreeNodeView> thisMatch = FindMatchingReleaseInScope(rows, addRefMatches.First().StackTreeNodeView, releaseFrames);
+                        List<StackTreeNodeView> thisMatch = FindMatchingReleaseInScope(rows, addRefMatches.First(), releaseFrames);
 
                         if (thisMatch != null &&
-                            (releaseMatches == null || thisMatch.Last().RowIndex < releaseMatches.Last().RowIndex))
+                            (releaseMatches == null || thisMatch.Last().Node.LineNumber < releaseMatches.Last().Node.LineNumber))
                         {
                             releaseMatches = thisMatch;
                         }
@@ -261,21 +267,24 @@ namespace CDOLeak_wasdk
                 }
                 else
                 {
-                    int addRefMatch = addRefMatches.Last().RowIndex;
+                    int addRefMatch = addRefMatches.Last().Node.LineNumber;
 
                     foreach (HeuristicFrame[] releaseFrames in _releasePatterns)
                     {
-                        List<MatchingStackTreeNodeView> thisMatch = FindUnannotatedMatch(rows, addRefMatch, releaseFrames, -1);
+                        List<StackTreeNodeView> thisMatch = FindUnannotatedMatch(rows, addRefMatch, releaseFrames, -1);
 
                         if (thisMatch != null &&
-                            (releaseMatches == null || thisMatch.Last().RowIndex < releaseMatches.Last().RowIndex))
+                            (releaseMatches == null || thisMatch.Last().Node.LineNumber < releaseMatches.Last().Node.LineNumber))
                         {
                             releaseMatches = thisMatch;
                         }
                     }
                 }
 
-                return (addRefMatches, releaseMatches);
+                Debug.Assert(addRefMatches.Count == 1);
+                Debug.Assert(releaseMatches == null || releaseMatches.Count == 1);
+
+                return (addRefMatches.First(), releaseMatches?.FirstOrDefault());
             }
             else
             {
@@ -287,7 +296,7 @@ namespace CDOLeak_wasdk
         /// <summary>
         /// Given a list of StackTreeNodeViews, find a matching entry starting at startIndex. Returns -1 if nothing is found.
         /// </summary>
-        private static List<MatchingStackTreeNodeView> FindUnannotatedMatch(List<StackTreeNodeView> rows, int startIndex, HeuristicFrame[] searchHierarchy, int refCountDiff)
+        private static List<StackTreeNodeView> FindUnannotatedMatch(List<StackTreeNodeView> rows, int startIndex, HeuristicFrame[] searchHierarchy, int refCountDiff)
         {
             // searchHierarchy contains a call chain. Find the very last thing, then confirm that all required parents match something in the ancestor list.
             HeuristicFrame lastCall = searchHierarchy[searchHierarchy.Length - 1];
@@ -311,16 +320,16 @@ namespace CDOLeak_wasdk
                         // must be the very next frame up. i.e. lastCall's immediate flag determines how we look for secondCall. In general,
                         // frame i's immediate flag determines how we look for frame i-1.
                         //
-                        List<MatchingStackTreeNodeView> matches = CheckAncestors(rows, row, searchHierarchy, searchHierarchy.Length - 2, lastCall.IsImmediate);
+                        List<StackTreeNodeView> matches = CheckAncestors(rows, row, searchHierarchy, searchHierarchy.Length - 2, lastCall.IsImmediate);
                         if (matches != null)
                         {
-                            matches.Add(new MatchingStackTreeNodeView(row, i));
+                            matches.Add(row);
                             return matches;
                         }
                     }
                     else
                     {
-                        return new List<MatchingStackTreeNodeView>() { new MatchingStackTreeNodeView(row, i) };
+                        return new List<StackTreeNodeView>() { row };
                     }
                 }
             }
@@ -328,7 +337,7 @@ namespace CDOLeak_wasdk
             return null;
         }
 
-        private static List<MatchingStackTreeNodeView> CheckAncestors(List<StackTreeNodeView> rows, StackTreeNodeView child, HeuristicFrame[] patterns, int nextPatternIndex, bool isImmediate)
+        private static List<StackTreeNodeView> CheckAncestors(List<StackTreeNodeView> rows, StackTreeNodeView child, HeuristicFrame[] patterns, int nextPatternIndex, bool isImmediate)
         {
             StackTreeNodeView current = child.ParentNodeView;
             HeuristicFrame matchingFrame = patterns[nextPatternIndex];
@@ -366,7 +375,7 @@ namespace CDOLeak_wasdk
                 if (nextPatternIndex == 0)
                 {
                     // Base case - if we've matched every pattern, then we're done.
-                    return new List<MatchingStackTreeNodeView>() { new MatchingStackTreeNodeView(current, rows.IndexOf(current)) };
+                    return new List<StackTreeNodeView>() { current };
                 }
                 else
                 {
@@ -374,12 +383,12 @@ namespace CDOLeak_wasdk
                     if (current.ParentNodeView != null)
                     {
                         // Match the rest of the pattern, starting at the next ancestor.
-                        List<MatchingStackTreeNodeView> matched = CheckAncestors(rows, current, patterns, nextPatternIndex - 1, matchingFrame.IsImmediate);
+                        List<StackTreeNodeView> matched = CheckAncestors(rows, current, patterns, nextPatternIndex - 1, matchingFrame.IsImmediate);
 
                         if (matched != null)
                         {
                             // The rest of the chain matched. We're done.
-                            matched.Add(new MatchingStackTreeNodeView(current, rows.IndexOf(current)));
+                            matched.Add(current);
                             return matched;
                         }
                         else if (!isImmediate)
@@ -403,7 +412,7 @@ namespace CDOLeak_wasdk
         /// <param name="addRef">The reference row containing the topmost frame for the AddRef call. We look in its siblings for the matching Release.</param>
         /// <param name="searchHierarchy">The full match criteria for the Release stack</param>
         /// <returns>The matching Release stack frames</returns>
-        private static List<MatchingStackTreeNodeView> FindMatchingReleaseInScope(List<StackTreeNodeView> rows, StackTreeNodeView addRefTopmost, HeuristicFrame[] frames)
+        private static List<StackTreeNodeView> FindMatchingReleaseInScope(List<StackTreeNodeView> rows, StackTreeNodeView addRefTopmost, HeuristicFrame[] frames)
         {
             StackTreeNodeView parent = addRefTopmost.ParentNodeView;
 
@@ -429,16 +438,16 @@ namespace CDOLeak_wasdk
                     {
                         if (frames.Length > 1)
                         {
-                            List<MatchingStackTreeNodeView> matches = CheckDescendants(rows, child, frames, 1);
+                            List<StackTreeNodeView> matches = CheckDescendants(rows, child, frames, 1);
                             if (matches != null)
                             {
-                                matches.Insert(0, new MatchingStackTreeNodeView(child, rows.IndexOf(child)));
+                                matches.Insert(0, child);
                                 return matches;
                             }
                         }
                         else
                         {
-                            return new List<MatchingStackTreeNodeView>() { new MatchingStackTreeNodeView(child, rows.IndexOf(child)) };
+                            return new List<StackTreeNodeView>() { child };
                         }
                     }
                 }
@@ -454,7 +463,7 @@ namespace CDOLeak_wasdk
         /// <param name="nextPatternIndex"></param>
         /// <param name="isImmediate"></param>
         /// <returns></returns>
-        private static List<MatchingStackTreeNodeView> CheckDescendants(List<StackTreeNodeView> rows, StackTreeNodeView parent, HeuristicFrame[] patterns, int nextPatternIndex)
+        private static List<StackTreeNodeView> CheckDescendants(List<StackTreeNodeView> rows, StackTreeNodeView parent, HeuristicFrame[] patterns, int nextPatternIndex)
         {
             HeuristicFrame currentHeuristicFrame = patterns[nextPatternIndex];
             bool isImmediate = currentHeuristicFrame.IsImmediate;
@@ -471,18 +480,18 @@ namespace CDOLeak_wasdk
                     if (nextPatternIndex == patterns.Length - 1)
                     {
                         // Base case - we've matched the last thing in the list. Return.
-                        return new List<MatchingStackTreeNodeView>() { new MatchingStackTreeNodeView(child, rows.IndexOf(child)) };
+                        return new List<StackTreeNodeView>() { child };
                     }
                     else
                     {
                         // There's still more to search. Keep searching through the rest of the heuristics.
-                        List<MatchingStackTreeNodeView> matches = CheckDescendants(rows, child, patterns, nextPatternIndex + 1);
+                        List<StackTreeNodeView> matches = CheckDescendants(rows, child, patterns, nextPatternIndex + 1);
 
                         // If the rest of the search succeeded, we're on the correct path. Add "child" to the list of results. Add at the
                         // head since the rest of the matches are lower down on the stack.
                         if (matches != null)
                         {
-                            matches.Insert(0, new MatchingStackTreeNodeView(child, rows.IndexOf(child)));
+                            matches.Insert(0, child);
                             return matches;
                         }
                         // If the rest of the chain didn't match, we might still be able to continue.

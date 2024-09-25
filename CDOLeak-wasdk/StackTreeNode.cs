@@ -34,6 +34,8 @@ namespace CDOLeak_wasdk
             }
         }
 
+        public int LineNumber { get; private set; }
+
         public string DisplayString { get; private set; }
         public string Comments { get; set; }
 
@@ -94,7 +96,7 @@ namespace CDOLeak_wasdk
 
         public override string ToString()
         {
-            return DisplayString + " // " + Comments;
+            return LineNumber + " " + DisplayString + " // " + Comments;
         }
 
         private StackTreeNode(StackTreeNode parent, string module, string function, string offset, string displayString)
@@ -139,6 +141,19 @@ namespace CDOLeak_wasdk
 
                 RefCountDiff = diff;
             }
+        }
+
+        private int UpdateLineNumber(int lineNumber)
+        {
+            LineNumber = lineNumber;
+            lineNumber++;
+
+            foreach (StackTreeNode child in _children)
+            {
+                lineNumber = child.UpdateLineNumber(lineNumber);
+            }
+
+            return lineNumber;
         }
 
         #region Trimming
@@ -267,6 +282,8 @@ namespace CDOLeak_wasdk
 
                 root.TrimTop();
                 root.TrimBottom();
+
+                root.UpdateLineNumber(1);
             }
 
             return root;

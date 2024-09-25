@@ -38,7 +38,7 @@ namespace CDOLeak_wasdk
             }
         }
 
-        private TextBlock _header;
+        private TextBlock _name;
 
         private TextBlock _delete;
 
@@ -63,7 +63,7 @@ namespace CDOLeak_wasdk
             };
             _expandCollapse.Tapped += _expandCollapse_Tapped;
 
-            _header = new TextBlock()
+            _name = new TextBlock()
             {
                 Text = heuristic.Name,
                 FontWeight = FontWeights.Bold,
@@ -85,7 +85,7 @@ namespace CDOLeak_wasdk
             };
             _headerPanel.Children.Add(_expandCollapse);
             _headerPanel.Children.Add(_delete);
-            _headerPanel.Children.Add(_header);
+            _headerPanel.Children.Add(_name);
 
             _bodyStackPanel = new StackPanel()
             {
@@ -134,37 +134,44 @@ namespace CDOLeak_wasdk
 
         public void RedrawUI()
         {
-            _addRef.Text = "AddRef: " + Heuristic.AddRefString;
-            _release.Text = "Release: " + Heuristic.ReleaseString;
+            _name.Text = Heuristic.Name;
+            if (Heuristic.IsLineMatch)
+            {
+                _addRef.Text = "AddRef: line " + Heuristic.AddRefLine;
+                _release.Text = "Release: line " + Heuristic.ReleaseLine;
+            }
+            else
+            {
+                _addRef.Text = "AddRef: " + Heuristic.AddRefString;
+                _release.Text = "Release: " + Heuristic.ReleaseString;
+            }
         }
 
-        internal void AddAddRef(StackTreeView stackTreeView, List<MatchingStackTreeNodeView> addRefMatches)
+        internal void AddAddRef(StackTreeView stackTreeView, StackTreeNodeView addRefMatch)
         {
             TextBlock addRefLog = new TextBlock()
             {
-                Text = String.Format("  - AddRef at line {0} - {1},", addRefMatches.Last().StackTreeNodeView.LineNumber, addRefMatches.Last().StackTreeNodeView.Node.DisplayString),
+                Text = String.Format("  - AddRef at line {0} - {1},", addRefMatch.Node.LineNumber, addRefMatch.Node.DisplayString),
             };
-            StackTreeNodeView addRefStackTreeNodeView = addRefMatches.Last().StackTreeNodeView;
-            addRefLog.Tapped += (sender, e) => { stackTreeView.ScrollIntoView(addRefStackTreeNodeView); };
+            addRefLog.Tapped += (sender, e) => { stackTreeView.ScrollIntoView(addRefMatch); };
             _bodyStackPanel.Children.Add(addRefLog);
-            _addRefNodeViews.Add(addRefStackTreeNodeView);
+            _addRefNodeViews.Add(addRefMatch);
         }
 
-        internal void AddRelease(StackTreeView stackTreeView, List<MatchingStackTreeNodeView> releaseMatches)
+        internal void AddRelease(StackTreeView stackTreeView, StackTreeNodeView releaseMatch)
         {
             TextBlock releaseLog = new TextBlock()
             {
-                Text = String.Format("       Release at {0} - {1}", releaseMatches.Last().StackTreeNodeView.LineNumber, releaseMatches.Last().StackTreeNodeView.Node.DisplayString),
+                Text = String.Format("       Release at {0} - {1}", releaseMatch.Node.LineNumber, releaseMatch.Node.DisplayString),
             };
-            StackTreeNodeView releaseStackTreeNodeView = releaseMatches.Last().StackTreeNodeView;
-            releaseLog.Tapped += (sender, e) => { stackTreeView.ScrollIntoView(releaseStackTreeNodeView); };
+            releaseLog.Tapped += (sender, e) => { stackTreeView.ScrollIntoView(releaseMatch); };
             _bodyStackPanel.Children.Add(releaseLog);
-            _releaseNodeViews.Add(releaseStackTreeNodeView);
+            _releaseNodeViews.Add(releaseMatch);
         }
 
         internal void SetTotal(int total)
         {
-            _header.Text = String.Format("({0}) {1}", total, Heuristic.Name);
+            _name.Text = String.Format("({0}) {1}", total, Heuristic.Name);
             _matches.Text = String.Format("{0} matches found:", total);
         }
 

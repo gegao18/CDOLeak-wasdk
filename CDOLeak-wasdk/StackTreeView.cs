@@ -1,10 +1,12 @@
 ﻿using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using Windows.Devices.Bluetooth.Advertisement;
@@ -108,7 +110,7 @@ namespace CDOLeak_wasdk
                     break;
 
                 case VirtualKey.C:
-                    if (!Window.Current.CoreWindow.GetKeyState(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down))
+                    if (!InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down))
                     {
                         CollapseDirectChildren(SelectedRow);
                         e.Handled = true;
@@ -150,11 +152,10 @@ namespace CDOLeak_wasdk
             UpdateUIState();
         }
 
-        internal int AddRow(StackTreeNodeView row)
+        internal void AddRow(StackTreeNodeView row)
         {
             _rows.Add(row);
             _stackPanel.Children.Add(row);
-            return _rows.Count;
         }
 
         #endregion
@@ -480,34 +481,38 @@ namespace CDOLeak_wasdk
 
         public void ApplyHeuristic(HeuristicView heuristicView)
         {
-            (List<MatchingStackTreeNodeView> AddRef, List<MatchingStackTreeNodeView> Release) addRefReleaseMatches = (null, null);
             int matchCount = 0;
-            int startIndex = 0;
-            do
+
+            if (heuristicView.Heuristic.IsLineMatch)
             {
-                addRefReleaseMatches = heuristicView.Heuristic.FindMatchingUnannotatedAddRefRelease(_rows, startIndex);
-                if (addRefReleaseMatches.AddRef != null)
+                StackTreeNodeView addRefMatch = _rows.Where(row => row.Node.LineNumber == heuristicView.Heuristic.AddRefLine).FirstOrDefault();
+                StackTreeNodeView releaseMatch = _rows.Where(row => row.Node.LineNumber == heuristicView.Heuristic.ReleaseLine).FirstOrDefault();
+
+                matchCount++;
+                FoundMatch(heuristicView, addRefMatch, releaseMatch, matchCount);
+            }
+            else
+            {
+                (StackTreeNodeView AddRef, StackTreeNodeView Release) addRefReleaseMatch = (null, null);
+                int startIndex = 0;
+                do
                 {
-                    // We found a match. If this was a wildcard scoped heuristic, it might be a partial match.
-                    // Update the start search index to skip this match next time.
-                    startIndex = addRefReleaseMatches.AddRef.Last().RowIndex + 1;
-
-                    // Only update the annotations if it's a full match.
-                    if (addRefReleaseMatches.Release != null)
+                    addRefReleaseMatch = heuristicView.Heuristic.FindMatchingUnannotatedAddRefRelease(_rows, startIndex);
+                    if (addRefReleaseMatch.AddRef != null)
                     {
-                        matchCount++;
+                        // We found a match. If this was a wildcard scoped heuristic, it might be a partial match.
+                        // Update the start search index to skip this match next time.
+                        startIndex = addRefReleaseMatch.AddRef.Node.LineNumber + 1;
 
-                        heuristicView.AddAddRef(this, addRefReleaseMatches.AddRef);
-                        heuristicView.AddRelease(this, addRefReleaseMatches.Release);
-
-                        addRefReleaseMatches.AddRef.Last().StackTreeNodeView.Node.Comments = "[AddRef for " + heuristicView.Heuristic.Name + ": match #" + matchCount + "]";
-                        addRefReleaseMatches.Release.Last().StackTreeNodeView.Node.Comments = "[Release for " + heuristicView.Heuristic.Name + ": match #" + matchCount + "]";
-
-                        addRefReleaseMatches.AddRef.Last().StackTreeNodeView.UpdateCommentTextBlock();
-                        addRefReleaseMatches.Release.Last().StackTreeNodeView.UpdateCommentTextBlock();
+                        // Only update the annotations if it's a full match.
+                        if (addRefReleaseMatch.Release != null)
+                        {
+                            matchCount++;
+                            FoundMatch(heuristicView, addRefReleaseMatch.AddRef, addRefReleaseMatch.Release, matchCount);
+                        }
                     }
-                }
-            } while (addRefReleaseMatches.AddRef != null);
+                } while (addRefReleaseMatch.AddRef != null);
+            }
 
             if (matchCount > 0)
             {
@@ -521,6 +526,20 @@ namespace CDOLeak_wasdk
             CollapseAnnotated();
 
             UpdateUIState();
+        }
+
+        private void FoundMatch(HeuristicView heuristicView, StackTreeNodeView addRefMatch, StackTreeNodeView releaseMatch, int matchCount)
+        {
+            Debug.Assert(addRefMatch != null && releaseMatch != null);
+
+            heuristicView.AddAddRef(this, addRefMatch);
+            heuristicView.AddRelease(this, releaseMatch);
+
+            addRefMatch.Node.Comments = "[AddRef for " + heuristicView.Heuristic.Name + ": match #" + matchCount + "]";
+            addRefMatch.UpdateCommentTextBlock();
+
+            releaseMatch.Node.Comments = "[Release for " + heuristicView.Heuristic.Name + ": match #" + matchCount + "]";
+            releaseMatch.UpdateCommentTextBlock();
         }
 
         internal void ScrollIntoView(StackTreeNodeView nodeView)
