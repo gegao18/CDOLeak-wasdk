@@ -273,9 +273,26 @@ namespace CDOLeak_wasdk
             // There won't be any if the input is bogus
             if (stacks.Any())
             {
+                int refCount = stacks.First().RefCount - 1;
+
                 foreach (RefCountStack stack in stacks)
                 {
+                    // don't bother identifying. We have the ref count. You know if it's AddRef or Release.
+                    if (stack.RefCount == refCount + 1)
+                    {
+                        stack.IsAddRef = true;
+                    }
+                    else if (stack.RefCount == refCount - 1)
+                    {
+                        stack.IsAddRef = false;
+                    }
+                    else
+                    {
+                        Debug.Assert(false, "Ref count changed unexpectedly.");
+                    }
+
                     root.MergeRefCountStack(stack, 0);
+                    refCount = stack.RefCount;
                 }
 
                 root.UpdateRefCountDiff();

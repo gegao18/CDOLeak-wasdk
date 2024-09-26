@@ -37,7 +37,9 @@ namespace CDOLeak_wasdk
         public const string CommentKeyword = "//";
         public const char ScopeKeyword = '=';
         public const char AddRefKeyword = '+';
+        public const string AddRefLineKeyword = "+@";
         public const char ReleaseKeyword = '-';
+        public const string ReleaseLineKeyword = "-@";
         public const char NameStartKeyword = '[';
         public const char NameEndKeyword = ']';
 
@@ -76,13 +78,29 @@ namespace CDOLeak_wasdk
 
         public void WriteToStream(StreamWriter sw)
         {
-            sw.WriteLine(string.Format("[{0}]", Name));
             // does not include scope
-            sw.WriteLine(string.Format("[+ {0}]", AddRefString));
-            foreach(string release in ReleaseStrings)
+
+            sw.WriteLine(string.Format("[{0}]", Name));
+            if (IsLineMatch)
             {
-                sw.WriteLine(string.Format("[- {0}]", release));
+                sw.WriteLine(string.Format("{0} {1}", AddRefLineKeyword, AddRefLine));
+                sw.WriteLine(string.Format("{0} {1}", ReleaseLineKeyword, ReleaseLine));
             }
+            else
+            {
+                sw.WriteLine(string.Format("{0} {1}", AddRefKeyword, AddRefString));
+                sw.WriteLine(string.Format("{0} {1}", ReleaseKeyword, ReleaseString));
+            }
+
+            sw.WriteLine();
+        }
+
+        public AddRefReleaseHeuristic(string name, int addRefLine, int releaseLine)
+        {
+            Name = name;
+            AddRefLine = addRefLine;
+            ReleaseLine = releaseLine;
+            IsLineMatch = true;
         }
 
         public AddRefReleaseHeuristic(string name, string scope, string addRef, IEnumerable<string> releases)

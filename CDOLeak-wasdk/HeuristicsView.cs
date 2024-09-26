@@ -340,14 +340,11 @@ namespace CDOLeak_wasdk
             StorageFile file = await picker.PickSaveFileAsync();
             if (file != null)
             {
-                using (Stream stream = file.OpenStreamForWriteAsync().Result)
+                using (StreamWriter sw = new StreamWriter(file.Path, false))
                 {
-                    using (StreamWriter sw = new StreamWriter(stream))
+                    foreach (HeuristicView heuristic in _contentPanel.Children)
                     {
-                        foreach (HeuristicView heuristic in _contentPanel.Children)
-                        {
-                            heuristic.Heuristic.WriteToStream(sw);
-                        }
+                        heuristic.Heuristic.WriteToStream(sw);
                     }
                 }
             }
@@ -371,6 +368,9 @@ namespace CDOLeak_wasdk
                         string name = null;
                         string scope = null;
                         string addRef = null;
+                        bool isLineMatch = false;
+                        int addRefLine = 0;
+                        int releaseLine = 0;
                         List<string> releases = new List<string>();
 
                         while (!sr.EndOfStream)
@@ -384,16 +384,21 @@ namespace CDOLeak_wasdk
                             }
                             else if (line.StartsWith(AddRefReleaseHeuristic.NameStartKeyword) && line.EndsWith(AddRefReleaseHeuristic.NameEndKeyword))
                             {
-                                if (!string.IsNullOrEmpty(name)
-                                    // scope can be null
-                                    && !string.IsNullOrEmpty(addRef)
-                                    && releases.Any())
+                                if (!string.IsNullOrEmpty(name))
                                 {
-                                    heuristics.Add(new AddRefReleaseHeuristic(name, scope, addRef, releases));
+                                    if (isLineMatch)
+                                    {
+                                        heuristics.Add(new AddRefReleaseHeuristic(name, addRefLine, releaseLine));
+                                    }
+                                    else if (!string.IsNullOrEmpty(addRef) && releases.Any())
+                                    {
+                                        heuristics.Add(new AddRefReleaseHeuristic(name, scope, addRef, releases));
+                                    }
                                     name = null;
                                     scope = null;
                                     addRef = null;
                                     releases = new List<string>();
+                                    isLineMatch = false;
                                 }
 
                                 name = line.Substring(1, line.Length - 2);
@@ -403,9 +408,23 @@ namespace CDOLeak_wasdk
                             {
                                 scope = line.Substring(1).Trim();
                             }
+                            else if (line.StartsWith(AddRefReleaseHeuristic.AddRefLineKeyword))
+                            {
+                                if (int.TryParse(line.Substring(AddRefReleaseHeuristic.AddRefLineKeyword.Length), out addRefLine))
+                                {
+                                    isLineMatch = true;
+                                }
+                            }
                             else if (line.StartsWith(AddRefReleaseHeuristic.AddRefKeyword))
                             {
                                 addRef = line.Substring(1).Trim();
+                            }
+                            else if (line.StartsWith(AddRefReleaseHeuristic.ReleaseLineKeyword))
+                            {
+                                if (int.TryParse(line.Substring(AddRefReleaseHeuristic.ReleaseLineKeyword.Length), out releaseLine))
+                                {
+                                    isLineMatch = true;
+                                }
                             }
                             else if (line.StartsWith(AddRefReleaseHeuristic.ReleaseKeyword))
                             {
@@ -413,17 +432,22 @@ namespace CDOLeak_wasdk
                             }
                         }
 
-                        // At the end of the file, add the last heuristic. We won't have another name tag for this add.
-                        if (!string.IsNullOrEmpty(name)
-                            // scope can be null
-                            && !string.IsNullOrEmpty(addRef)
-                            && releases.Any())
+                        // At the end of the file, add the last heuristic. We won't have another name tag to add it.
+                        if (!string.IsNullOrEmpty(name))
                         {
-                            heuristics.Add(new AddRefReleaseHeuristic(name, scope, addRef, releases));
+                            if (isLineMatch)
+                            {
+                                heuristics.Add(new AddRefReleaseHeuristic(name, addRefLine, releaseLine));
+                            }
+                            else if (!string.IsNullOrEmpty(addRef) && releases.Any())
+                            {
+                                heuristics.Add(new AddRefReleaseHeuristic(name, scope, addRef, releases));
+                            }
                             name = null;
                             scope = null;
                             addRef = null;
                             releases = new List<string>();
+                            isLineMatch = false;
                         }
                     }
                 }

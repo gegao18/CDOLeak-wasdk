@@ -61,16 +61,6 @@ namespace CDOLeak_wasdk
                         int refCount = Convert.ToInt32(line.Replace(RefCountStack.RefCountIs, string.Empty));
 
                         refCountStack = new RefCountStack(refCount);
-
-                        // If the stack isn't identified yet and it's the first stack in the trace, then mark it as an AddRef stack.
-                        // We explicitly look for some keywords when identifying stacks. The first stack is likely the ctor for the
-                        // object, so it's going to be an AddRef. Depending on where in the ctor the stack gets dumped, it'll likely
-                        // not have any of the keywords we're looking for.
-                        if (refCountStacks.Count == 0)
-                        {
-                            refCountStack.DefaultToAddRefStack();
-                        }
-
                         refCountStacks.Add(refCountStack);
                         frameNumber = 0;
                         continue;

@@ -113,46 +113,29 @@ namespace CDOLeak_wasdk
         public const string StackEnd = "Stack end";
         public const string TimeTravelPosition = "Time Travel Position: ";
 
-        private bool _isAddRef;
-        public bool IsAddRef
-        {
-            get
-            {
-                Debug.Assert(_identified);
-                return _isAddRef;
-            }
-        }
+        public bool IsAddRef { get; set; }
 
         public int RefCount { get; private set; }
 
         public string Position { get; set; }
 
         private List<StackLine> _lines;
-        private bool _identified;
 
         public override string ToString()
         {
-            if (_identified)
+            if (this.IsAddRef)
             {
-                if (this.IsAddRef)
-                {
-                    return string.Format("AddRef stack, {0} lines", _lines.Count());
-                }
-                else
-                {
-                    return string.Format("Release stack, {0} lines", _lines.Count());
-                }
+                return string.Format("AddRef stack, {0} lines", _lines.Count());
             }
             else
             {
-                return string.Format("Unidentified stack, {0} lines", _lines.Count());
+                return string.Format("Release stack, {0} lines", _lines.Count());
             }
         }
 
         public RefCountStack(int refCount)
         {
             _lines = new List<StackLine>();
-            _identified = false;
             RefCount = refCount;
         }
 
@@ -164,44 +147,9 @@ namespace CDOLeak_wasdk
             if (canAdd)
             {
                 _lines.Add(stackLine);
-
-                if (!_identified)
-                {
-                    if (stackLine.Function.Contains("AddRef")
-                        || stackLine.Function.Contains("AddStrong")
-                        || stackLine.Function.Contains("xref::details::optional_ref_count::set_local_flag")
-                        || stackLine.Function.Contains("Microsoft::WRL2::NestableRuntimeClass::InternalAddRef")
-                        || stackLine.Function.Contains("CDependencyObject::CDependencyObject")
-                        || stackLine.Function.Contains("DirectUI::DependencyObject::DependencyObject")
-                        || stackLine.Function.Contains("EncodeWeakReferencePointer")
-                        || stackLine.SourceLine.Contains("WeakReference.cpp @ 25")    // WeakReferenceImpl::Resolve does both an InterlockedCompareExchange for AddRef and an InterlockedDecrement. It's both.
-                        || (stackLine.Function.Contains("::Resolve") && stackLine.Offset.Contains("0x23"))
-                        || stackLine.Function.Contains("::QueryInterface")
-                        )
-                    {
-                        _isAddRef = true;
-                        _identified = true;
-                    }
-                    else if (stackLine.Function.Contains("Release")
-                        || (stackLine.Function.Contains("::Resolve") && stackLine.Offset.Contains("0x3b"))
-                        || (stackLine.Function.Contains("PAL_InterlockedDecrement")))
-                    {
-                        _isAddRef = false;
-                        _identified = true;
-                    }
-                }
             }
 
             return canAdd;
-        }
-
-        public void DefaultToAddRefStack()
-        {
-            if (!_identified)
-            {
-                _isAddRef = true;
-                _identified = true;
-            }
         }
 
         /// <summary>
