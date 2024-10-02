@@ -203,9 +203,10 @@ namespace CDOLeak_wasdk
 
         #region Building from RefCountStack
 
-        private void MergeRefCountStack(RefCountStack stack, int level)
+        private bool MergeRefCountStack(RefCountStack stack, int level)
         {
             // Assume everything is merged up to level. We have to figure out where it goes in level+1.
+            // Returns whether the merge was successful. If not, the caller has to create another StackTreeNode.
 
             // Get the line at level+1. This is the child frame we have to merge.
             StackLine line = stack.GetFrameFromBottom(level + 1);
@@ -217,11 +218,12 @@ namespace CDOLeak_wasdk
                 if (_stack == null)
                 {
                     _stack = stack;
+                    return true;
                 }
                 else
                 {
-                    Debug.Assert(false, "stack has already been found, it shouldn't be found a second time");
-                    // could be multiple AddRefs by the same stack
+                    // Could be multiple AddRefs by the same stack. Have the caller create a duplicate frame.
+                    return false;
                 }
             }
             else
@@ -237,8 +239,7 @@ namespace CDOLeak_wasdk
                         && string.Equals(lastChild.Comments, line.Comments))
                     {
                         // If found, it goes in there.
-                        lastChild.MergeRefCountStack(stack, level + 1);
-                        merged = true;
+                        merged = lastChild.MergeRefCountStack(stack, level + 1);
                     }
                 }
 
@@ -256,8 +257,12 @@ namespace CDOLeak_wasdk
                         Comments = line.Comments,
                     };
                     _children.Add(newNode);
-                    newNode.MergeRefCountStack(stack, level + 1);
+                    merged = newNode.MergeRefCountStack(stack, level + 1);
+
+                    Debug.Assert(merged);
                 }
+
+                return merged;
             }
         }
 
